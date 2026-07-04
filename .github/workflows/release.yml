@@ -21,7 +21,10 @@ jobs:
         include:
           - { os: ubuntu-latest, goos: linux, goarch: amd64, ext: "" }
           - { os: macos-latest, goos: darwin, goarch: arm64, ext: "" }
-          - { os: macos-13, goos: darwin, goarch: amd64, ext: "" }
+          # Intel-Mac binary is cross-compiled on the Apple-Silicon runner
+          # (macOS's toolchain is universal) — avoids the scarce/slow macos-13
+          # Intel runner while still shipping a darwin/amd64 build.
+          - { os: macos-latest, goos: darwin, goarch: amd64, ext: "", cc: "clang -arch x86_64" }
           - { os: windows-latest, goos: windows, goarch: amd64, ext: ".exe" }
     runs-on: ${{ matrix.os }}
     defaults:
@@ -39,7 +42,13 @@ jobs:
           cache-dependency-path: codaw/go.sum
 
       - name: Build
-        run: go build -o "../dist/codaw-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" ./cmd/codaw
+        # Stamp the version from the tag into the binary (main.version).
+        # GOOS/GOARCH come from the matrix; CC is only set for the cross build.
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          export GOOS="${{ matrix.goos }}" GOARCH="${{ matrix.goarch }}"
+          if [ -n "${{ matrix.cc }}" ]; then export CC="${{ matrix.cc }}"; fi
+          go build -ldflags "-X main.version=$VERSION" -o "../dist/codaw-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" ./cmd/codaw
 
       - name: Attach to release
         uses: softprops/action-gh-release@v2
@@ -71,6 +80,12 @@ jobs:
 
       - name: Install deps
         run: npm ci
+
+      - name: Set version from tag
+        # The tag is the single source of truth. This overwrites package.json's
+        # version in the runner only (not committed) so the published extension
+        # always matches the tag — no more manual bumping / drift.
+        run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version
 
       - name: Package .vsix
         run: npx --yes @vscode/vsce package --out codaw.vsix

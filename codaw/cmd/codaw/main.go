@@ -23,12 +23,18 @@ func main() {
 	}
 }
 
+// version is stamped in at build time via -ldflags "-X main.version=X.Y.Z"
+// (see .github/workflows/release.yml). Defaults to "dev" for local builds.
+var version = "dev"
+
 // rootCmd is the base command — running `codaw` with no subcommand shows help.
+// Setting Version enables the built-in `codaw --version` flag.
 var rootCmd = &cobra.Command{
-	Use:   "codaw",
-	Short: "CodaW — a code-first digital audio workstation",
+	Use:     "codaw",
+	Version: version,
+	Short:   "CodaW — a code-first digital audio workstation",
 	Long: `CodaW is a DAW where your project lives in plain text files.
-Define tracks, clips, effects, and automation in TOML — 
+Define tracks, clips, effects, and automation in TOML —
 then git commit your whole session like a software project.`,
 }
 
