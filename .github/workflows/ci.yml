@@ -1,0 +1,76 @@
+name: CI
+
+# Run on every push to main and on pull requests.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # ───────────────────────────────────────────────
+  #  Go engine — build, vet, test on all 3 OSes.
+  #
+  #  CodaW uses cgo (miniaudio), which can't be cleanly cross-compiled, so we
+  #  build natively on each OS. The runners already have a C compiler:
+  #  clang (macOS), gcc (Linux), MinGW gcc (Windows). This is the same matrix
+  #  the future release workflow reuses to produce downloadable binaries.
+  # ───────────────────────────────────────────────
+  go:
+    name: go (${{ matrix.os }})
+    strategy:
+      fail-fast: false # let every OS report, even if one fails
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: codaw # the Go module lives in the codaw/ subdir
+    env:
+      CGO_ENABLED: "1" # required for miniaudio
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: codaw/go.mod # single source of truth for the Go version
+          cache-dependency-path: codaw/go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+  # ───────────────────────────────────────────────
+  #  VS Code extension — install, lint, bundle.
+  #  Only needs one OS; the bundle is platform-independent JS.
+  # ───────────────────────────────────────────────
+  extension:
+    name: extension
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vscode-extension
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: vscode-extension/package-lock.json
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build bundle
+        run: npm run package # webpack production build; fails if TS/bundling breaks

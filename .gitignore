@@ -1,0 +1,57 @@
+# ─────────────────────────────────────────────
+#  OS / editor cruft
+# ─────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*~
+
+# JetBrains (GoLand/IntelliJ) — per-machine, keep it local
+.idea/
+
+# ─────────────────────────────────────────────
+#  Secrets / env
+# ─────────────────────────────────────────────
+.env
+.env.*
+*.local
+
+# ─────────────────────────────────────────────
+#  Go engine (codaw/)
+# ─────────────────────────────────────────────
+# Compiled binaries from `go build` in the module root. Path-anchored so the
+# cmd/codaw and cmd/playtest source dirs stay tracked.
+/codaw/codaw
+/codaw/playtest
+/codaw/bin/
+# GoReleaser output when run from the module
+/codaw/dist/
+
+# Go test / coverage artifacts
+*.test
+*.out
+coverage.txt
+
+# Stray audio renders — anchored to repo root and module root ONLY, so the
+# committed samples in codaw/testdata/basic/samples/ are NOT ignored.
+/*.wav
+/codaw/*.wav
+
+# ─────────────────────────────────────────────
+#  VS Code extension (vscode-extension/)
+# ─────────────────────────────────────────────
+# webpack bundle output
+vscode-extension/dist/
+# tsc test output
+vscode-extension/out/
+# downloaded VS Code for integration tests
+vscode-extension/.vscode-test/
+# packaged extension artifacts
+vscode-extension/*.vsix
+
+# node_modules anywhere
+node_modules/
+
+# npm / yarn logs
+npm-debug.log*
+yarn-error.log*
+*.log

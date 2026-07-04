@@ -1,0 +1,15 @@
+id   = "pad"
+gain = -6.0
+pan  = -0.1
+
+[[fx]]
+type      = "reverb"
+room_size = 0.65
+wet       = 0.4
+
+[[clip]]
+file  = "samples/pad_cmaj.wav"
+start = 8.0
+end   = 32.0
+loop  = true
+gain  = 0.0

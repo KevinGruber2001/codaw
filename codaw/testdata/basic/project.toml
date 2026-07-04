@@ -1,0 +1,18 @@
+[project]
+name    = "basic test"
+version = "0.1"
+author  = "kevin"
+
+[transport]
+bpm         = 128
+time_sig    = "4/4"
+sample_rate = 48000
+bit_depth   = 32
+
+[layout]
+master = "master.toml"
+buses  = ["buses/drums.toml"]
+tracks = [
+  "tracks/kick.toml",
+  "tracks/pad.toml",
+]

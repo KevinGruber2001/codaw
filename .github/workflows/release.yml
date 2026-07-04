@@ -1,0 +1,89 @@
+name: Release
+
+# Fires when you push a version tag, e.g.  git tag v0.1.0 && git push origin v0.1.0
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # needed to create the GitHub Release and upload binaries
+
+jobs:
+  # ───────────────────────────────────────────────
+  #  Native binaries for each OS/arch → GitHub Release.
+  #  cgo can't cross-compile cleanly, so each target builds on its own runner.
+  # ───────────────────────────────────────────────
+  binaries:
+    name: binary (${{ matrix.goos }}/${{ matrix.goarch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, goos: linux, goarch: amd64, ext: "" }
+          - { os: macos-latest, goos: darwin, goarch: arm64, ext: "" }
+          - { os: macos-13, goos: darwin, goarch: amd64, ext: "" }
+          - { os: windows-latest, goos: windows, goarch: amd64, ext: ".exe" }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: codaw
+        shell: bash # consistent quoting across Linux/macOS/Windows
+    env:
+      CGO_ENABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: codaw/go.mod
+          cache-dependency-path: codaw/go.sum
+
+      - name: Build
+        run: go build -o "../dist/codaw-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" ./cmd/codaw
+
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/* # path is relative to the repo root, not working-directory
+
+  # ───────────────────────────────────────────────
+  #  Publish the extension. Builds the .vsix once, then publishes it to any
+  #  registry whose token secret is present — so Open VSX alone works today,
+  #  and adding VSCE_PAT later enables the MS Marketplace with no other change.
+  # ───────────────────────────────────────────────
+  extension:
+    name: publish extension
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vscode-extension
+    env:
+      OVSX_TOKEN: ${{ secrets.OVSX_TOKEN }}
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: vscode-extension/package-lock.json
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Package .vsix
+        run: npx --yes @vscode/vsce package --out codaw.vsix
+
+      - name: Publish to Open VSX
+        if: ${{ env.OVSX_TOKEN != '' }}
+        run: npx --yes ovsx publish codaw.vsix --pat "$OVSX_TOKEN"
+
+      - name: Publish to VS Code Marketplace
+        if: ${{ env.VSCE_PAT != '' }}
+        run: npx --yes @vscode/vsce publish --packagePath codaw.vsix --pat "$VSCE_PAT"
+
+      - name: Attach .vsix to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: vscode-extension/codaw.vsix

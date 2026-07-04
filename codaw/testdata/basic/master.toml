@@ -1,0 +1,11 @@
+gain    = 0.0
+limiter = true
+
+[[fx]]
+type     = "eq_3band"
+low_hz   = 100
+low_db   = 1.5
+mid_hz   = 1200
+mid_db   = -2.0
+high_hz  = 8000
+high_db  = 0.5
