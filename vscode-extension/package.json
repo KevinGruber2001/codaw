@@ -5,6 +5,7 @@
   "version": "0.1.2",
   "publisher": "kevingruber",
   "license": "MIT",
+  "icon": "icon.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/KevinGruber2001/codaw.git",

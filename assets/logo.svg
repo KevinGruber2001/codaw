@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="CodaW logo">
+  <rect width="512" height="512" fill="#17181C"/>
+  <g transform="translate(256,256) scale(4)" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M -30 -34 H -42 V 34 H -30" fill="none" stroke="#F5F5F6" stroke-width="10"/>
+    <path d="M 30 -34 H 42 V 34 H 30" fill="none" stroke="#F5F5F6" stroke-width="10"/>
+    <rect x="-22" y="-14" width="11" height="28" rx="5" fill="#F5F5F6"/>
+    <rect x="-6" y="-24" width="11" height="48" rx="5" fill="#FF6A5A"/>
+    <rect x="10" y="-18" width="11" height="36" rx="5" fill="#F5F5F6"/>
+  </g>
+</svg>

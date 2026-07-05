@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/KevinGruber2001/codaw/main/assets/logo.png" width="120" alt="CodaW logo" />
+</p>
+
 # CodaW
 
 A VS Code extension for [CodaW](https://github.com/KevinGruber2001/codaw) — a
