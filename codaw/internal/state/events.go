@@ -31,6 +31,10 @@ const (
 	// EventTrackSoloChanged fires when a track's solo state changes.
 	EventTrackSoloChanged EventType = "track.solo_changed"
 
+	// EventClipGainChanged fires when a single clip's gain trim changes.
+	// Hot-swappable: the engine adjusts that clip's volume live, no rebuild.
+	EventClipGainChanged EventType = "clip.gain_changed"
+
 	// EventFXParamChanged fires when any FX parameter on any track/bus/master changes.
 	EventFXParamChanged EventType = "fx.param_changed"
 
@@ -114,6 +118,13 @@ type TrackMutePayload struct {
 type TrackSoloPayload struct {
 	TrackID string
 	Soloed  bool
+}
+
+// ClipGainPayload is the payload for EventClipGainChanged.
+type ClipGainPayload struct {
+	TrackID   string
+	ClipIndex int     // position in the track's clip list (0-based)
+	Gain      float64 // new clip gain trim in dB
 }
 
 // FXParamPayload is the payload for EventFXParamChanged.

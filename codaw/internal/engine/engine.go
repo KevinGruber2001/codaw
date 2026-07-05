@@ -13,6 +13,7 @@ package engine
 
 import (
 	"log"
+	"math"
 	"sync"
 
 	"github.com/KevinGruber2001/codaw/internal/audio"
@@ -42,8 +43,22 @@ type Engine struct {
 	fx map[string][]*audio.Effect
 
 	// automation
-	lanes    []autoLane // resolved automation curves
-	playBase uint64     // engine clock frame where timeline beat 0 sits
+	lanes []autoLane // resolved automation curves
+
+	// transport / playhead
+	//
+	// The engine's global clock is a monotonic frame counter. To know "which
+	// beat is playing", we remember which clock frame corresponds to which
+	// timeline beat at the moment playback (re)started:
+	//
+	//   position = playStartBeat + (clock - playFrame) / framesPerBeat
+	//
+	// Storing (frame, beat) as a pair — instead of "frame where beat 0 sits" —
+	// avoids unsigned underflow when seeking far into the timeline early in
+	// the engine's life (beat 0 could map to a negative clock frame).
+	playFrame     uint64  // clock frame where playStartBeat sits
+	playStartBeat float64 // timeline beat at playFrame
+	pendingBeat   float64 // where the NEXT Play starts (set by Seek/Stop)
 
 	// live-update plumbing
 	events      chan state.Event
@@ -87,9 +102,15 @@ func (e *Engine) Load() error {
 	return e.reload()
 }
 
-// reload rebuilds the graph from scratch. Caller must hold e.mu.
+// reload rebuilds the graph from scratch, preserving the playhead: if we were
+// playing at beat N when a structural/BPM change landed, playback resumes at
+// beat N on the new graph instead of snapping back to 0. Caller must hold e.mu.
 func (e *Engine) reload() error {
 	wasPlaying := e.playing
+	resumeAt := e.pendingBeat
+	if wasPlaying {
+		resumeAt = e.positionBeatsLocked()
+	}
 	e.stopLocked()
 	e.teardownGraph()
 
@@ -104,31 +125,110 @@ func (e *Engine) reload() error {
 		return err
 	}
 	if wasPlaying {
-		e.playLocked()
+		return e.playFromLocked(resumeAt)
 	}
+	e.pendingBeat = resumeAt
 	return nil
 }
 
-// Play schedules every clip on the timeline and starts the transport.
+// Play starts (or resumes) playback from the pending position — beat 0 on a
+// fresh engine, or wherever Stop/Seek last left the playhead.
 func (e *Engine) Play() error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return e.playLocked()
+	return e.playFromLocked(e.pendingBeat)
 }
 
-func (e *Engine) playLocked() error {
-	// Give ourselves a short lead-in so all clips are armed before the clock
-	// reaches the first one. ~100 ms of frames.
+// Seek moves the playhead to the given beat. If playing, playback jumps there
+// live; if stopped, the position is remembered for the next Play.
+func (e *Engine) Seek(beat float64) error {
+	if beat < 0 {
+		beat = 0
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.playing {
+		return e.playFromLocked(beat)
+	}
+	e.pendingBeat = beat
+	return nil
+}
+
+// PositionBeats reports the current playhead position in beats — live during
+// playback, or the pending start position while stopped. Safe for any
+// goroutine (the serve loop polls this for position events).
+func (e *Engine) PositionBeats() float64 {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.playing {
+		return e.positionBeatsLocked()
+	}
+	return e.pendingBeat
+}
+
+// Playing reports whether the transport is currently running.
+func (e *Engine) Playing() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.playing
+}
+
+// playFromLocked (re)starts playback with the playhead at fromBeat.
+// Caller must hold e.mu.
+//
+// Every clip falls into one of three cases relative to the playhead:
+//
+//	ends before it   → stays silent (nothing to do)
+//	starts after it  → scheduled at its normal offset, shifted by -fromBeat
+//	spans it         → the interesting one: the sound must start immediately
+//	                   but from the correct position INSIDE its source file,
+//	                   as if it had been playing all along
+func (e *Engine) playFromLocked(fromBeat float64) error {
+	// Unarm everything first — leftover schedules from a previous Play would
+	// otherwise fire alongside the new ones.
+	e.stopLocked()
+
+	// Short lead-in (~100 ms) so every clip is armed before the clock reaches
+	// the first start frame. base is the clock frame where fromBeat sits.
 	lead := uint64(e.transport.sampleRate / 10)
 	base := e.audio.TimeFrames() + lead
-	e.playBase = base // automation measures the playhead relative to this
+	e.playFrame = base
+	e.playStartBeat = fromBeat
+	e.pendingBeat = fromBeat
+
+	secPerBeat := 60.0 / e.transport.bpm
 
 	for _, sc := range e.clips {
-		startFrame := base + e.transport.beatsToFrames(sc.startBeat)
-		sc.sound.ScheduleStart(startFrame)
-		if sc.endBeat > sc.startBeat {
-			sc.sound.ScheduleStop(base + e.transport.beatsToFrames(sc.endBeat))
+		if sc.endBeat <= fromBeat {
+			continue // already over at this playhead
 		}
+		stopFrame := base + e.transport.beatsToFrames(sc.endBeat-fromBeat)
+
+		if sc.startBeat >= fromBeat {
+			// Starts in the future: rewind the sound to its in-point (its
+			// cursor may sit anywhere after an earlier Play) and schedule.
+			if err := sc.sound.SeekToSecond(sc.offsetSec); err != nil {
+				return err
+			}
+			sc.sound.ScheduleStart(base + e.transport.beatsToFrames(sc.startBeat-fromBeat))
+		} else {
+			// Playhead lands inside this clip: figure out where in the FILE
+			// we'd be after (fromBeat - startBeat) beats of playback.
+			lenSec, err := sc.sound.LengthSeconds()
+			if err != nil {
+				return err
+			}
+			filePos, ok := clipFilePosition(sc.offsetSec, lenSec, sc.loop, (fromBeat-sc.startBeat)*secPerBeat)
+			if !ok {
+				continue // non-looping clip whose audio already ran out
+			}
+			if err := sc.sound.SeekToSecond(filePos); err != nil {
+				return err
+			}
+			sc.sound.ScheduleStart(base)
+		}
+
+		sc.sound.ScheduleStop(stopFrame)
 		if err := sc.sound.Start(); err != nil {
 			return err
 		}
@@ -137,10 +237,38 @@ func (e *Engine) playLocked() error {
 	return nil
 }
 
-// Stop halts all clips. The graph stays built, so Play can start it again.
+// clipFilePosition maps "elapsed seconds since the clip's timeline start" to a
+// position inside the source file, honouring the in-point offset and looping.
+//
+// Playback walks the file as: offset → end, then (if looping) 0 → end, 0 → end…
+// (miniaudio loops to the file start, not the offset — see Sound.SeekToSecond).
+// The math simply retraces that walk. Returns ok=false when a non-looping
+// clip's audio is already exhausted at this position. Pure function so the
+// wrap-around logic is unit-testable without an audio device.
+func clipFilePosition(offsetSec, lenSec float64, loop bool, elapsedSec float64) (float64, bool) {
+	if lenSec <= 0 {
+		return 0, false
+	}
+
+	firstPass := lenSec - offsetSec // seconds of audio in the first pass
+	if elapsedSec < firstPass {
+		return offsetSec + elapsedSec, true
+	}
+	if !loop {
+		return 0, false // ran out of audio; silence fills the clip window
+	}
+	return math.Mod(elapsedSec-firstPass, lenSec), true
+}
+
+// Stop halts all clips and parks the playhead at the stop position, so a
+// following Play resumes where you left off (pause semantics). Use Seek(0)
+// for return-to-start.
 func (e *Engine) Stop() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.playing {
+		e.pendingBeat = e.positionBeatsLocked()
+	}
 	e.stopLocked()
 }
 
@@ -241,6 +369,16 @@ func (e *Engine) handle(ev state.Event) {
 		log.Printf("[engine] bpm changed → rebuilding timeline")
 		if err := e.reload(); err != nil {
 			log.Printf("[engine] rebuild after bpm change failed: %v", err)
+		}
+
+	case state.EventClipGainChanged:
+		pl := ev.Payload.(state.ClipGainPayload)
+		for _, sc := range e.clips {
+			if sc.trackID == pl.TrackID && sc.clipIndex == pl.ClipIndex {
+				sc.sound.SetGainDB(pl.Gain)
+				log.Printf("[engine] clip %s[%d] gain = %.1f dB", pl.TrackID, pl.ClipIndex, pl.Gain)
+				break
+			}
 		}
 
 	case state.EventFXParamChanged:

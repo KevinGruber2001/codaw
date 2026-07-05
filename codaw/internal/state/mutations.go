@@ -122,6 +122,28 @@ func SetTrackSolo(trackID string, soloed bool) Mutation {
 	}
 }
 
+// SetClipGain returns a Mutation that sets one clip's gain trim.
+// Targeted on purpose: clip gain is hot-swappable in the engine (a volume
+// knob on an already-loaded sound), so it must NOT go through ReplaceTrack,
+// which would force a full graph rebuild for a simple volume tweak.
+func SetClipGain(trackID string, clipIndex int, gain float64) Mutation {
+	return func(p *project.Project) Event {
+		for _, t := range p.Tracks {
+			if t.ID == trackID {
+				if clipIndex < 0 || clipIndex >= len(t.Clips) {
+					return Event{}
+				}
+				t.Clips[clipIndex].Gain = gain
+				return Event{
+					Type:    EventClipGainChanged,
+					Payload: ClipGainPayload{TrackID: trackID, ClipIndex: clipIndex, Gain: gain},
+				}
+			}
+		}
+		return Event{}
+	}
+}
+
 // ─────────────────────────────────────────────
 //  FX mutations
 // ─────────────────────────────────────────────

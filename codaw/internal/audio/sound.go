@@ -146,6 +146,17 @@ func (s *Sound) SeekToSecond(sec float64) error {
 	return nil
 }
 
+// LengthSeconds reports the duration of the decoded source file. Needed by the
+// engine's transport seek: landing mid-clip requires knowing where inside the
+// file the playhead falls, which depends on the file's length (loop wrapping).
+func (s *Sound) LengthSeconds() (float64, error) {
+	var sec C.float
+	if res := C.ma_sound_get_length_in_seconds(s.ptr, &sec); res != C.MA_SUCCESS {
+		return 0, fmt.Errorf("audio: get length failed: %s", maResult(res))
+	}
+	return float64(sec), nil
+}
+
 // ScheduleStart tells the sound to begin outputting audio when the engine's
 // global clock reaches the given absolute frame. Combined with the engine's
 // current time, this is how we place clips on the timeline.

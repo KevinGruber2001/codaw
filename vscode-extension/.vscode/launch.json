@@ -9,7 +9,11 @@
 			"name": "Run Extension",
 			"type": "extensionHost",
 			"request": "launch",
+			// First arg = the folder the dev-host window opens with. The repo
+			// root contains codaw/testdata/basic/project.toml, so the CodaW
+			// transport view appears immediately.
 			"args": [
+				"${workspaceFolder}/..",
 				"--extensionDevelopmentPath=${workspaceFolder}"
 			],
 			"outFiles": [

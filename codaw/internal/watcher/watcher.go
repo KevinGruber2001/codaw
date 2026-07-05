@@ -320,9 +320,12 @@ func (w *Watcher) handleTrackChange(file string, old *project.Track, p *project.
 				structural = true
 				break
 			}
-			// Clip gain is hot-swappable — but we don't have a dedicated
-			// mutation for it yet, so treat as structural for now.
-			// TODO: add SetClipGain mutation in a future pass
+			// Clip gain is hot-swappable — a targeted mutation lets the
+			// engine turn the clip's volume knob without any rebuild.
+			if old.Clips[i].Gain != updated.Clips[i].Gain {
+				w.store.Apply(state.SetClipGain(old.ID, i, updated.Clips[i].Gain))
+				log.Printf("[watcher]   clip[%d].gain: %.1f → %.1f dB", i, old.Clips[i].Gain, updated.Clips[i].Gain)
+			}
 		}
 	}
 

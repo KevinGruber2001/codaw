@@ -10,6 +10,7 @@ import (
 
 	"github.com/KevinGruber2001/codaw/internal/engine"
 	"github.com/KevinGruber2001/codaw/internal/project"
+	"github.com/KevinGruber2001/codaw/internal/serve"
 	"github.com/KevinGruber2001/codaw/internal/state"
 	"github.com/KevinGruber2001/codaw/internal/watcher"
 )
@@ -48,6 +49,7 @@ func init() {
 	rootCmd.AddCommand(playCmd)
 	rootCmd.AddCommand(watchCmd)
 	rootCmd.AddCommand(renderCmd)
+	rootCmd.AddCommand(serveCmd)
 }
 
 // ─────────────────────────────────────────────
@@ -184,6 +186,63 @@ without playing through the speakers. Faster than real time.`,
 		}
 		fmt.Println("✓ done")
 		return nil
+	},
+}
+
+// ─────────────────────────────────────────────
+//  serve command — runtime control channel
+// ─────────────────────────────────────────────
+
+var serveCmd = &cobra.Command{
+	Use:   "serve <project.toml>",
+	Short: "Run the engine under a frontend, speaking NDJSON over stdio",
+	Long: `Loads a project, watches its files for hot-reload, and speaks CodaW's
+control protocol (newline-delimited JSON) on stdin/stdout. Meant to be spawned
+as a child process by a frontend (e.g. the VS Code extension), which sends
+transport commands (play/stop/seek) and receives position events.
+
+stdout carries only protocol messages; all logs go to stderr.
+Exits when stdin closes (i.e. when the parent process goes away).
+
+See docs/ipc.md for the protocol.`,
+	Args: cobra.ExactArgs(1),
+	// SilenceUsage: a runtime error must not dump cobra's usage text into the
+	// middle of the machine-readable stdout stream.
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// IMPORTANT: nothing in this command may print to stdout — that is
+		// the protocol stream. Human output goes to stderr.
+		p, err := project.Load(args[0])
+		if err != nil {
+			return fmt.Errorf("load failed: %w", err)
+		}
+		if err := project.Validate(p); err != nil {
+			return fmt.Errorf("invalid project:\n%v", err)
+		}
+
+		store := state.New(p)
+		eng, err := engine.New(store)
+		if err != nil {
+			return fmt.Errorf("engine init failed: %w", err)
+		}
+		defer eng.Close()
+		if err := eng.Load(); err != nil {
+			return fmt.Errorf("build graph failed: %w", err)
+		}
+
+		// File watching stays on: the frontend edits TOML, the watcher
+		// hot-reloads — the control channel never carries project data.
+		w, err := watcher.New(store)
+		if err != nil {
+			return fmt.Errorf("watcher init failed: %w", err)
+		}
+		if err := w.Start(); err != nil {
+			return fmt.Errorf("watcher start failed: %w", err)
+		}
+		defer w.Stop()
+
+		// Blocks until stdin closes (parent exited) — our shutdown signal.
+		return serve.New(eng, version).Run(os.Stdin, os.Stdout)
 	},
 }
 

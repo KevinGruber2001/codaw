@@ -1,0 +1,6 @@
+{
+  // Used by the CodaW extension (dev workflow): point the transport at the
+  // locally built engine. Build it with:
+  //   cd codaw && go build -o codaw ./cmd/codaw
+  "codaw.enginePath": "${workspaceFolder}/codaw/codaw"
+}

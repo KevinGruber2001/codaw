@@ -45,7 +45,10 @@ jobs:
         run: go vet ./...
 
       - name: Test
-        run: go test ./...
+        # -race matters here: the state Store's copy-on-write contract is
+        # guarded by a concurrent reader/writer test that only bites with
+        # the race detector enabled.
+        run: go test -race ./...
 
   # ───────────────────────────────────────────────
   #  VS Code extension — install, lint, bundle.

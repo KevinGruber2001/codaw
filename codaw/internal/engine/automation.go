@@ -124,18 +124,19 @@ func interpolate(pts []project.AutomationPoint, beat float64) float64 {
 }
 
 // positionBeatsLocked returns the current playhead position in beats, derived
-// from the engine's global sample clock relative to where playback started.
-// Caller holds e.mu.
+// from the engine's global sample clock relative to the (frame, beat) anchor
+// set when playback last (re)started. During the pre-roll lead-in (clock not
+// yet at the anchor frame) it reports the anchor beat. Caller holds e.mu.
 func (e *Engine) positionBeatsLocked() float64 {
 	now := e.audio.TimeFrames()
-	if now <= e.playBase {
-		return 0
+	if now <= e.playFrame {
+		return e.playStartBeat
 	}
 	fpb := e.transport.framesPerBeat()
 	if fpb <= 0 {
-		return 0
+		return e.playStartBeat
 	}
-	return float64(now-e.playBase) / fpb
+	return e.playStartBeat + float64(now-e.playFrame)/fpb
 }
 
 // applyLaneLocked samples one lane at the given beat and pushes the value into

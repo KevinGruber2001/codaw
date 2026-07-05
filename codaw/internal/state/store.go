@@ -114,11 +114,21 @@ func (s *Store) Get() *project.Project {
 // This is the ONLY way to modify state in CodaW.
 // Never modify the project directly — always go through Apply().
 //
-// The flow:
-//  1. Acquire exclusive write lock (blocks all readers until we're done)
-//  2. Run the mutation function (modifies project in place)
-//  3. Release write lock
+// The flow (copy-on-write):
+//  1. Acquire exclusive write lock
+//  2. Deep-CLONE the current project, run the mutation on the clone
+//  3. Swap the store's pointer to the clone, release the lock
 //  4. Emit the resulting event to all subscribers
+//
+// Why clone instead of mutating in place? Get() hands out the current
+// pointer, and readers keep using it AFTER their read lock is released —
+// the engine's automation ticker iterates p.Tracks every 20ms, the watcher
+// holds `old` track pointers across a diff. Mutating the shared object under
+// them is a data race (`go test -race` flags it). With copy-on-write, a
+// snapshot that has ever been handed out is never written again: readers see
+// a consistent (if momentarily stale) project, and the next Get() returns
+// the new one. Mutations are rare (file saves, UI tweaks) and projects are
+// small, so the clone cost is negligible.
 //
 // Note: we release the lock BEFORE emitting events.
 // Why? Because emitting to a channel could block (if a subscriber's channel
@@ -126,14 +136,15 @@ func (s *Store) Get() *project.Project {
 // This means subscribers receive events slightly after the state changes,
 // but that's fine — they call Get() to read the new state anyway.
 func (s *Store) Apply(m Mutation) {
-	// Step 1 + 2 + 3 — lock, mutate, unlock
 	var event Event
 	func() {
 		// We wrap this in an anonymous function so we can use defer
 		// for the unlock while still capturing the event return value.
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		event = m(s.project)
+		next := s.project.Clone()
+		event = m(next)
+		s.project = next
 	}()
 
 	// Step 4 — emit event (lock is already released)

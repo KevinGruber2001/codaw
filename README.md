@@ -22,6 +22,18 @@ CodaW is a DAW where the session is code you can version, diff, and hand-edit. N
 | [`codaw/`](codaw/) | The audio engine — a Go + miniaudio (cgo) CLI. Loads/validates a project, plays it, hot-reloads on edit, and renders to WAV. |
 | [`vscode-extension/`](vscode-extension/) | The editor UI, published on Open VSX as `kevingruber.codaw`. |
 
+## Install
+
+Grab a prebuilt binary for your OS from the
+[latest release](https://github.com/KevinGruber2001/codaw/releases) — no
+toolchain needed.
+
+Building from source requires Go plus a C compiler (the engine embeds
+[miniaudio](https://miniaud.io) via cgo). Note that `go install .../codaw@latest`
+is deliberately unsupported: the Go module lives in the `codaw/` subdirectory of
+this monorepo, and cgo would require every user to carry a C toolchain anyway —
+prebuilt release binaries are the supported channel.
+
 ## Quick start (engine)
 
 ```bash

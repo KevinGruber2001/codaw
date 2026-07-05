@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"log"
 	"path/filepath"
 
 	"github.com/KevinGruber2001/codaw/internal/audio"
@@ -11,10 +12,18 @@ import (
 // scheduledClip pairs a loaded Sound with the timeline info we need to place it
 // when playback starts. We keep the beat positions (not pre-computed frames)
 // because the frame offset depends on BPM, which can change at runtime.
+// trackID + clipIndex identify the clip's slot in the project, so targeted
+// events (EventClipGainChanged) can find the right Sound without a rebuild.
+// loop and offsetSec are needed again at seek time: landing mid-clip means
+// computing where inside the source file the playhead falls.
 type scheduledClip struct {
 	sound     *audio.Sound
+	trackID   string
+	clipIndex int
 	startBeat float64
 	endBeat   float64
+	loop      bool
+	offsetSec float64
 }
 
 // buildGraph constructs the whole audio routing tree from a project:
@@ -32,6 +41,14 @@ func (e *Engine) buildGraph(p *project.Project) error {
 	}
 	master.SetGainDB(p.Master.Gain)
 	e.master = master
+
+	// Be honest about unimplemented config rather than silently ignoring it —
+	// a project file that claims limiter protection should not get clipping
+	// without at least a loud warning. Real limiter DSP is on the roadmap
+	// (needs a custom miniaudio node with a C process callback).
+	if p.Master.Limiter {
+		log.Printf("[engine] WARNING: master limiter = true but no limiter DSP is implemented yet — output can clip above 0 dBFS")
+	}
 
 	masterFX, err := e.buildChain(p.Master.FX)
 	if err != nil {
@@ -109,8 +126,12 @@ func (e *Engine) buildGraph(p *project.Project) error {
 			}
 			e.clips = append(e.clips, scheduledClip{
 				sound:     s,
+				trackID:   t.ID,
+				clipIndex: i,
 				startBeat: c.Start,
 				endBeat:   c.End,
+				loop:      c.Loop,
+				offsetSec: c.Offset,
 			})
 		}
 	}

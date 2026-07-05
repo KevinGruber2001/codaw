@@ -17,7 +17,9 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "customEditors": [
@@ -34,10 +36,35 @@
     ],
     "commands": [
       {
-        "command": "codaw.helloWorld",
-        "title": "Hello World"
+        "command": "codaw.togglePlay",
+        "title": "CodaW: Play / Pause"
+      },
+      {
+        "command": "codaw.stop",
+        "title": "CodaW: Stop (return to start)"
       }
-    ]
+    ],
+    "views": {
+      "explorer": [
+        {
+          "type": "webview",
+          "id": "codaw.transport",
+          "name": "CodaW",
+          "when": "codaw.hasProject",
+          "icon": "icon.png"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "CodaW",
+      "properties": {
+        "codaw.enginePath": {
+          "type": "string",
+          "default": "codaw",
+          "description": "Path to the codaw engine binary. Defaults to 'codaw' on PATH; point this at your built binary (e.g. /path/to/repo/codaw/codaw) during development."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
