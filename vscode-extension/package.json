@@ -32,6 +32,36 @@
           }
         ],
         "priority": "default"
+      },
+      {
+        "viewType": "codaw.busEditor",
+        "displayName": "CodaW Bus",
+        "selector": [
+          {
+            "filenamePattern": "**/buses/*.toml"
+          }
+        ],
+        "priority": "default"
+      },
+      {
+        "viewType": "codaw.masterEditor",
+        "displayName": "CodaW Master",
+        "selector": [
+          {
+            "filenamePattern": "**/master.toml"
+          }
+        ],
+        "priority": "default"
+      },
+      {
+        "viewType": "codaw.projectEditor",
+        "displayName": "CodaW Project",
+        "selector": [
+          {
+            "filenamePattern": "**/project.toml"
+          }
+        ],
+        "priority": "default"
       }
     ],
     "commands": [
@@ -42,6 +72,10 @@
       {
         "command": "codaw.stop",
         "title": "CodaW: Stop (return to start)"
+      },
+      {
+        "command": "codaw.openMixer",
+        "title": "CodaW: Open Mixer"
       }
     ],
     "views": {
@@ -68,9 +102,11 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
-    "compile": "webpack",
+    "build:webviews": "vite build",
+    "compile": "npm run build:webviews && webpack",
     "watch": "webpack --watch",
-    "package": "webpack --mode production --devtool hidden-source-map",
+    "watch:webviews": "vite build --watch",
+    "package": "npm run build:webviews && webpack --mode production --devtool hidden-source-map",
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
@@ -78,15 +114,18 @@
     "test": "vscode-test"
   },
   "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.1.2",
     "@types/mocha": "^10.0.10",
     "@types/node": "24.x",
     "@types/vscode": "^1.125.0",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.0.0",
     "eslint": "^10.5.0",
+    "svelte": "^5.56.4",
     "ts-loader": "^9.6.2",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.61.1",
+    "vite": "^8.1.3",
     "webpack": "^5.107.2",
     "webpack-cli": "^7.0.3"
   },

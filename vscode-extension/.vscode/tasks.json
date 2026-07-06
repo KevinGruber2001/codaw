@@ -4,6 +4,27 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
+			// F5 default: build the Svelte webviews once, then keep webpack
+			// watching the host code. (Re-run "npm: build:webviews" — or use
+			// watch:webviews — after editing .svelte files.)
+			"label": "build all (watch host)",
+			"dependsOrder": "sequence",
+			"dependsOn": [
+				"npm: build:webviews",
+				"npm: watch"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"problemMatcher": []
+		},
+		{
+			"type": "npm",
+			"script": "build:webviews",
+			"problemMatcher": []
+		},
+		{
 			"type": "npm",
 			"script": "watch",
 			"problemMatcher": "$ts-webpack-watch",
@@ -12,10 +33,7 @@
 				"reveal": "never",
 				"group": "watchers"
 			},
-			"group": {
-				"kind": "build",
-				"isDefault": true
-			}
+			"group": "build"
 		},
 		{
 			"type": "npm",

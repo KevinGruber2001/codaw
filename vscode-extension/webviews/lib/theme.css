@@ -1,0 +1,54 @@
+/*
+ * CodaW design tokens. Every color derives from a VS Code theme variable, so
+ * the UI is native in any theme, light or dark, without shipping palettes.
+ * The look aims where OpenDAW points: flat, compact, engineered — no chrome.
+ */
+:root {
+  --daw-bg: var(--vscode-editor-background);
+  --daw-panel: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  --daw-fg: var(--vscode-foreground);
+  --daw-muted: var(--vscode-descriptionForeground);
+  --daw-border: var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+  --daw-accent: var(--vscode-focusBorder);
+  --daw-track: var(--vscode-input-background);
+
+  /* Semantic mixer colors from the charts palette (present in all themes). */
+  --daw-solo: var(--vscode-charts-yellow, #e5c07b);
+  --daw-mute: var(--vscode-charts-red, #e06c75);
+  --daw-level: var(--vscode-charts-green, #98c379);
+
+  --daw-radius: 3px;
+  --daw-font: var(--vscode-font-family);
+  --daw-mono: var(--vscode-editor-font-family, monospace);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--daw-fg);
+  font-family: var(--daw-font);
+  font-size: 12px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Shared primitives used across views. */
+.daw-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--daw-muted);
+}
+
+.daw-value {
+  font-family: var(--daw-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+.daw-card {
+  background: var(--daw-panel);
+  border: 1px solid var(--daw-border);
+  border-radius: var(--daw-radius);
+}

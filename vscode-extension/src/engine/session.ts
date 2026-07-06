@@ -1,25 +1,19 @@
 import * as vscode from 'vscode';
 import { EngineClient } from './engineClient';
-
-export interface TransportState {
-  beat: number;
-  playing: boolean;
-  engineRunning: boolean;
-}
+import type { TransportState } from '../protocol';
 
 // TransportSession owns the engine process and the session-global playback
-// state. It is pure logic — no UI. Views (the sidebar transport, commands,
-// future timeline panels) subscribe via onStateChange and call the verbs.
+// state. It is pure logic — no UI. Views (the sidebar transport, the mixer,
+// future timeline panels) subscribe via subscribe() and call the verbs.
 // Keeping the session separate from any one view means the engine survives
-// the sidebar being collapsed/hidden: hiding UI must never kill the audio.
+// views being closed/collapsed: hiding UI must never kill the audio.
 export class TransportSession {
   private client: EngineClient | undefined;
   private starting = false;
+  private listeners = new Set<(s: TransportState) => void>();
 
   beat = 0;
   playing = false;
-
-  onStateChange?: (s: TransportState) => void;
 
   constructor(context: vscode.ExtensionContext) {
     context.subscriptions.push({ dispose: () => this.client?.dispose() });
@@ -27,6 +21,12 @@ export class TransportSession {
 
   state(): TransportState {
     return { beat: this.beat, playing: this.playing, engineRunning: this.client !== undefined };
+  }
+
+  /** Register a state listener; returns an unsubscribe disposable. */
+  subscribe(fn: (s: TransportState) => void): vscode.Disposable {
+    this.listeners.add(fn);
+    return { dispose: () => this.listeners.delete(fn) };
   }
 
   async togglePlay(): Promise<void> {
@@ -56,7 +56,7 @@ export class TransportSession {
 
   async seek(beat: number): Promise<void> {
     if (!this.client) {
-      return;
+      return; // scrubbing with no engine is a no-op, like stop
     }
     try {
       await this.client.seek(beat);
@@ -66,7 +66,10 @@ export class TransportSession {
   }
 
   private notify(): void {
-    this.onStateChange?.(this.state());
+    const s = this.state();
+    for (const fn of this.listeners) {
+      fn(s);
+    }
   }
 
   // ensureEngine finds the project, spawns `codaw serve`, and wires events.

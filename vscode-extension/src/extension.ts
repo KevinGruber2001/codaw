@@ -1,34 +1,39 @@
 import * as vscode from 'vscode';
-import { TrackEditorProvider } from './trackEditor';
-import { TransportSession } from './transport';
-import { TransportViewProvider } from './transportView';
+import {
+	DocumentEditorProvider,
+	trackKind,
+	busKind,
+	masterKind,
+	projectKind,
+} from './editors/documentEditor';
+import { TransportSession } from './engine/session';
+import { TransportViewProvider } from './views/transportView';
+import { MixerPanel } from './panels/mixerPanel';
 
+// Activation is registration only — all behaviour lives in the modules:
+//   editors/   per-file custom editors (track, bus, master, project)
+//   panels/    command-palette panels (mixer)
+//   views/     sidebar views (transport)
+//   engine/    the codaw process + session state
 export function activate(context: vscode.ExtensionContext) {
-	const trackEditor = vscode.window.registerCustomEditorProvider(
-		'codaw.trackEditor',
-		new TrackEditorProvider(context),
-		// Keep the webview alive when the tab is backgrounded, so knob/fader
-		// state and scroll position survive tab switches.
-		{ webviewOptions: { retainContextWhenHidden: true } }
-	);
+	// Per-file editors: one generic provider, four kind configs.
+	for (const kind of [trackKind, busKind, masterKind, projectKind]) {
+		context.subscriptions.push(DocumentEditorProvider.register(context, kind));
+	}
 
 	// Session logic (engine process, playback state) is UI-independent; the
-	// sidebar view and the commands are both thin frontends over it.
+	// sidebar view and the commands are thin frontends over it.
 	const session = new TransportSession(context);
 
-	const transportView = vscode.window.registerWebviewViewProvider(
-		TransportViewProvider.viewType,
-		new TransportViewProvider(session),
-		// Keep the webview's DOM when the section is collapsed — cheap for a
-		// tiny view, and reopening feels instant.
-		{ webviewOptions: { retainContextWhenHidden: true } }
-	);
-
 	context.subscriptions.push(
-		trackEditor,
-		transportView,
+		vscode.window.registerWebviewViewProvider(
+			TransportViewProvider.viewType,
+			new TransportViewProvider(context.extensionUri, session),
+			{ webviewOptions: { retainContextWhenHidden: true } }
+		),
 		vscode.commands.registerCommand('codaw.togglePlay', () => session.togglePlay()),
-		vscode.commands.registerCommand('codaw.stop', () => session.stop())
+		vscode.commands.registerCommand('codaw.stop', () => session.stop()),
+		vscode.commands.registerCommand('codaw.openMixer', () => MixerPanel.open(context.extensionUri))
 	);
 
 	// The transport view is gated on `codaw.hasProject` (see the `when` clause
