@@ -1,18 +1,16 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { parse as parseToml } from 'smol-toml';
 import { webviewHtml, webviewOptions } from '../webview/html';
 import { applyScalarEdit } from '../toml/edits';
+import { readSessionLayout, readToml } from '../toml/sessionReader';
 import type { MixerChannel, ViewMsg } from '../protocol';
 
-type Toml = Record<string, unknown>;
-
-// MixerPanel is the first cross-file view: one editor-area panel showing
-// every track, bus, and master as channel strips. Unlike the per-file
-// editors it aggregates MANY documents — the project's layout decides which
-// files belong to the session, and each strip edit routes back to its own
-// file. Opened via the command palette (codaw.openMixer); a singleton, so
-// re-running the command reveals the existing panel.
+// MixerPanel is a cross-file view: one editor-area panel showing every track,
+// bus, and master as channel strips. Unlike the per-file editors it
+// aggregates MANY documents — the project's layout decides which files belong
+// to the session, and each strip edit routes back to its own file. Opened via
+// the command palette (codaw.openMixer); a singleton, so re-running the
+// command reveals the existing panel.
 export class MixerPanel {
   private static current: MixerPanel | undefined;
 
@@ -68,36 +66,23 @@ export class MixerPanel {
   }
 }
 
-// gatherChannels loads the session exactly the way the Go loader does:
-// project.toml's [layout] section names the files, resolved relative to the
-// project root. That keeps the mixer's world view identical to the engine's.
+// gatherChannels loads the session via the shared layout reader, so the
+// mixer's world view is identical to the engine's (and the arrangement's).
 async function gatherChannels(): Promise<MixerChannel[]> {
-  const projects = await vscode.workspace.findFiles('**/project.toml', '**/node_modules/**', 1);
-  if (projects.length === 0) {
+  const layout = await readSessionLayout();
+  if (!layout) {
     return [];
   }
-  const projectUri = projects[0];
-  const rootDir = path.dirname(projectUri.fsPath);
-
-  const project = await readToml(projectUri.fsPath);
-  if (!project) {
-    return [];
-  }
-  const layout = (project.layout ?? {}) as Toml;
-  const trackFiles = Array.isArray(layout.tracks) ? (layout.tracks as string[]) : [];
-  const busFiles = Array.isArray(layout.buses) ? (layout.buses as string[]) : [];
-  const masterFile = typeof layout.master === 'string' ? layout.master : 'master.toml';
 
   const channels: MixerChannel[] = [];
 
-  for (const rel of trackFiles) {
-    const file = path.join(rootDir, rel);
+  for (const file of layout.trackFiles) {
     const raw = await readToml(file);
     if (raw) {
       channels.push({
         file,
         kind: 'track',
-        id: String(raw.id ?? path.basename(rel, '.toml')),
+        id: String(raw.id ?? path.basename(file, '.toml')),
         gain: Number(raw.gain ?? 0),
         pan: Number(raw.pan ?? 0),
         mute: Boolean(raw.mute ?? false),
@@ -107,24 +92,22 @@ async function gatherChannels(): Promise<MixerChannel[]> {
     }
   }
 
-  for (const rel of busFiles) {
-    const file = path.join(rootDir, rel);
+  for (const file of layout.busFiles) {
     const raw = await readToml(file);
     if (raw) {
       channels.push({
         file,
         kind: 'bus',
-        id: String(raw.id ?? path.basename(rel, '.toml')),
+        id: String(raw.id ?? path.basename(file, '.toml')),
         gain: Number(raw.gain ?? 0),
       });
     }
   }
 
-  const masterPath = path.join(rootDir, masterFile);
-  const master = await readToml(masterPath);
+  const master = await readToml(layout.masterFile);
   if (master) {
     channels.push({
-      file: masterPath,
+      file: layout.masterFile,
       kind: 'master',
       id: 'master',
       gain: Number(master.gain ?? 0),
@@ -132,13 +115,4 @@ async function gatherChannels(): Promise<MixerChannel[]> {
   }
 
   return channels;
-}
-
-async function readToml(file: string): Promise<Toml | undefined> {
-  try {
-    const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
-    return parseToml(doc.getText()) as Toml;
-  } catch {
-    return undefined; // missing or invalid file: skip the channel, not the mixer
-  }
 }

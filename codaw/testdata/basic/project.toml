@@ -4,7 +4,7 @@ version = "0.1"
 author  = "kevin"
 
 [transport]
-bpm         = 128
+bpm         = 128.0
 time_sig    = "4/4"
 sample_rate = 48000
 bit_depth   = 32

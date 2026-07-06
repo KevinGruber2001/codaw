@@ -24,6 +24,7 @@ export default defineConfig({
         master: resolve(__dirname, 'webviews/entries/master.ts'),
         project: resolve(__dirname, 'webviews/entries/project.ts'),
         mixer: resolve(__dirname, 'webviews/entries/mixer.ts'),
+        arrangement: resolve(__dirname, 'webviews/entries/arrangement.ts'),
         transport: resolve(__dirname, 'webviews/entries/transport.ts'),
       },
       output: {

@@ -9,6 +9,7 @@ import {
 import { TransportSession } from './engine/session';
 import { TransportViewProvider } from './views/transportView';
 import { MixerPanel } from './panels/mixerPanel';
+import { ArrangementPanel } from './panels/arrangementPanel';
 
 // Activation is registration only — all behaviour lives in the modules:
 //   editors/   per-file custom editors (track, bus, master, project)
@@ -33,7 +34,10 @@ export function activate(context: vscode.ExtensionContext) {
 		),
 		vscode.commands.registerCommand('codaw.togglePlay', () => session.togglePlay()),
 		vscode.commands.registerCommand('codaw.stop', () => session.stop()),
-		vscode.commands.registerCommand('codaw.openMixer', () => MixerPanel.open(context.extensionUri))
+		vscode.commands.registerCommand('codaw.openMixer', () => MixerPanel.open(context.extensionUri)),
+		vscode.commands.registerCommand('codaw.openArrangement', () =>
+			ArrangementPanel.open(context.extensionUri, session)
+		)
 	);
 
 	// The transport view is gated on `codaw.hasProject` (see the `when` clause

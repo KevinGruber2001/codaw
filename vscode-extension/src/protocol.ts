@@ -79,11 +79,27 @@ export interface TransportState {
   engineRunning: boolean;
 }
 
+// The arrangement (main) view: every track as a lane, clips in time.
+export interface ArrangementTrack {
+  file: string;
+  id: string;
+  mute: boolean;
+  solo: boolean;
+  clips: ClipData[];
+}
+
+export interface ArrangementData {
+  bpm: number;
+  beatsPerBar: number;
+  tracks: ArrangementTrack[];
+}
+
 // ── Host → webview ──────────────────────────────────────────────────────────
 
 export type HostMsg =
   | { type: 'update'; data: unknown } // per-file editors: freshly parsed TOML
   | { type: 'mixer'; channels: MixerChannel[] }
+  | { type: 'arrangement'; data: ArrangementData }
   | { type: 'transport'; state: TransportState }
   | { type: 'invalid'; message: string }; // document currently unparseable
 
@@ -98,5 +114,8 @@ export type ViewMsg =
   | { type: 'edit'; file?: string; key: string; value: number | boolean | string }
   // Set one parameter of the Nth [[fx]] block.
   | { type: 'fxEdit'; file?: string; index: number; key: string; value: number }
+  // Move the Nth [[clip]] on the timeline (start + end change together,
+  // atomically — one edit, one save, one git diff).
+  | { type: 'clipMove'; file: string; index: number; start: number; end: number }
   // Transport verbs (any view may host transport controls).
   | { type: 'transport'; action: 'toggle' | 'stop' | 'seek'; beat?: number };

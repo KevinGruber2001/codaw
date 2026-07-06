@@ -76,6 +76,10 @@
       {
         "command": "codaw.openMixer",
         "title": "CodaW: Open Mixer"
+      },
+      {
+        "command": "codaw.openArrangement",
+        "title": "CodaW: Open Arrangement"
       }
     ],
     "views": {

@@ -59,12 +59,31 @@ export async function applyScalarEdit(
   value: number | boolean | string,
   target: Target = {}
 ): Promise<boolean> {
-  const edit = buildScalarEdit(document, key, value, target);
-  if (!edit) {
-    return false;
-  }
+  return applyScalarEdits(document, [{ key, value, target }]);
+}
+
+export interface ScalarEdit {
+  key: string;
+  value: number | boolean | string;
+  target?: Target;
+}
+
+// applyScalarEdits applies several value replacements as ONE workspace edit
+// and one save. Needed when values change together (a clip move rewrites
+// start AND end): separate edits would save twice, and the engine's watcher
+// would briefly see — and audibly play — a half-moved clip.
+export async function applyScalarEdits(
+  document: vscode.TextDocument,
+  edits: ScalarEdit[]
+): Promise<boolean> {
   const we = new vscode.WorkspaceEdit();
-  we.replace(document.uri, edit.range, edit.newText);
+  for (const e of edits) {
+    const built = buildScalarEdit(document, e.key, e.value, e.target ?? {});
+    if (!built) {
+      return false; // all or nothing — a partial multi-edit is worse than none
+    }
+    we.replace(document.uri, built.range, built.newText);
+  }
   if (!(await vscode.workspace.applyEdit(we))) {
     return false;
   }

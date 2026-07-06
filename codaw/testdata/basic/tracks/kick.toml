@@ -1,7 +1,7 @@
 id   = "kick"
 bus  = "drums"
 gain = 0.0
-pan  = 0.0
+pan  = -0.02
 
 [[fx]]
 type   = "eq_3band"
@@ -14,8 +14,8 @@ high_db = -2.0
 
 [[clip]]
 file  = "samples/kick_01.wav"
-start = 0.0
-end   = 16.0
+start = 4.0
+end   = 20.0
 loop  = true
 gain  = 0.0
 
