@@ -56,23 +56,27 @@ Test discipline: these are all deterministic offline-renderable, so each gets
 a golden-render test through the existing `NewOfflineEngine` path. Silence in,
 silence out; a sine in, a known RMS out.
 
-## Milestone 2 — Plugins, phase 1
+## Milestone 2 — Plugins as Go functions
 
-*See `docs/plugins.md` for the full decision. Depends on Milestone 1.*
+*See `docs/plugins.md`. Depends on Milestone 1 for the custom node.*
 
-6. **[new] Plugin manifest + resolver.** `plugins/<id>/plugin.toml`, parameter
-   declarations, `plugins` listing over `serve`.
-7. **[new] Declarative DSP patch runtime** — primitives + control-rate
-   expressions, running on the Milestone 1 node.
-8. **[gap] Manifest-driven validation.** Unknown `fx.type` and out-of-range
-   params become load-time errors with file and line, matching the standard
-   the rest of the loader already sets.
+6. **[new] Plugin registry.** A `plugins` package where one Go file registers
+   one effect: an ID, a list of declared params, and a `Sample` or `Block`
+   function. Compiled into the binary — the "install step" is `go build`.
+7. **[new] Resolve `fx.type` through the registry** in `buildEffect`, so a
+   plugin is used from TOML exactly like a built-in, with the existing
+   hot-reload and automation paths carrying its params unchanged.
+8. **[gap] Manifest-driven validation.** An unknown `fx.type` becomes a
+   load-time error with file and line instead of a runtime "skipping" log, and
+   out-of-range params are caught the same way.
 9. **[gap] Manifest-driven UI.** The extension's suffix heuristic in
-   `fxParams.ts` becomes the *fallback*; real labels, ranges and units come
-   from the manifest — for built-ins and third-party plugins alike.
-10. **[new] `codaw plugin add|verify`** + `codaw.lock` with content hashes,
-    vendored and committed with the song. **Reproducible renders forever is
-    the headline feature** — lead with it.
+   `fxParams.ts` becomes the *fallback*; real labels and ranges come from the
+   declared params, so a new plugin gets correct knobs with no UI work.
+10. **[new] Two or three example plugins** in-tree, written to be copied.
+
+Explicitly *not* in this milestone: distributable plugin artifacts, a
+lockfile, a registry service, wasm. Sharing a plugin means sharing a `.go`
+file until someone actually needs more.
 
 ## Milestone 3 — Make it feel like a DAW
 
@@ -115,8 +119,9 @@ CodaW becomes a place you write music rather than assemble it.*
     clip written into the track TOML. miniaudio already provides duplex.
 20. **[new] Freeze / bounce a track** to a rendered WAV — the pragmatic answer
     to CPU load and to plugin churn.
-21. **[new] Plugins, phase 2 (Wasm)**, when someone credibly hits the
-    declarative ceiling. Not before.
+21. **[new] Distributable plugins (Wasm)** — only if people are actually
+    writing plugins and the rebuild step is what's stopping them spreading.
+    Not before that evidence exists.
 
 ## What "bringing it to life" means outside the code
 
@@ -146,7 +151,7 @@ or dies on whether someone can *see the point in 60 seconds*:
 
 ```
 M1 audio callback ──┬─► compressor / limiter / reverb        (fixes 3 gaps)
-                    └─► M2 plugins phase 1 ──► M5.21 wasm    (the ecosystem)
+                    └─► M2 plugins as Go functions ──► M5.21 wasm, if ever
 
 M3 meters / bit depth / loop / bootstrap                     (parallel, polish)
 
