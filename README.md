@@ -21,7 +21,7 @@ CodaW is a DAW where the session is code you can version, diff, and hand-edit. N
 |------|------|
 | [`codaw/`](codaw/) | The audio engine — a Go + miniaudio (cgo) CLI. Loads/validates a project, plays it, hot-reloads on edit, and renders to WAV. |
 | [`vscode-extension/`](vscode-extension/) | The editor UI, published on Open VSX as `kevingruber.codaw`. |
-| [`docs/`](docs/) | Design notes and roadmap — the [control channel](docs/ipc.md), the [plugin ecosystem](docs/plugins.md), and [what's next](docs/roadmap.md). |
+| [`docs/`](docs/) | Design notes and roadmap — the [control channel](docs/ipc.md), the [engine architecture](docs/architecture.md), the [plugin ecosystem](docs/plugins.md), and [what's next](docs/roadmap.md). |
 
 ## Install
 
