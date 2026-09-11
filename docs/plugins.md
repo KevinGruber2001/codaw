@@ -1,118 +1,80 @@
 # Plugins — design notes
 
-Status: **decided, not implemented.**
-Decision: **a plugin is a Go function. The compile step is `go build`.**
+Status: **decided, not implemented** — see issues #4 (built-ins) and #7 (user plugins).
 
-## The shape
+Two kinds of effect, one registry.
 
-Writing a plugin should be something a person who knows a little Go can do in
-one sitting, by copying a file and changing the maths. So a plugin is one Go
-file that registers a function:
+## Built-in effects are Go functions
+
+The EQ, compressor, limiter and reverb ship with CodaW and are plain Go:
 
 ```go
-// plugins/tape_sat.go
-package plugins
-
-import "math"
-
-func init() {
-	Register(Plugin{
-		ID:   "tape_sat",
-		Name: "Tape Saturator",
-		Params: []Param{
-			{Key: "drive", Default: 0.3, Min: 0, Max: 1},
-		},
-		// Called once per sample. Return the new value. That's the whole API.
-		Sample: func(x float32, p Params) float32 {
-			drive := 1 + p.Get("drive")*24
-			return float32(math.Tanh(float64(x) * drive))
-		},
-	})
-}
+type Effect func(buf []float32, frames, channels int)
 ```
 
-Drop the file in, `go build`, and `tape_sat` exists. No ABI, no runtime, no
-sandbox, no cross-compilation matrix, no new dependency.
+Native speed, no abstraction, and they run on every track of every project.
 
-Effects that need memory between samples (filters, delays, compressors)
-implement `Block` instead, which gets the whole buffer plus a per-instance
-state struct. `Sample` is the easy door; `Block` is the one with room in it.
+## User plugins are Lua files in the project
 
-## The TOML side does not change
+A plugin belongs to a **project**, not to a release. Someone making a song adds an
+effect to their own project without rebuilding CodaW and without waiting for one:
 
-This is the part that stays exactly as it is today — params live in TOML, the
-watcher hot-reloads them, the mixer UI drives them:
-
-```toml
-[[fx]]
-type  = "tape_sat"
-drive = 0.6
+```
+my-song/
+  project.toml
+  plugins/
+    tape_sat.lua      <- committed with the song
 ```
 
-Automation already works too, because the target syntax is index-based and
-`internal/engine/automation.go` doesn't care what kind of effect `fx[0]` is:
+```lua
+params { drive = { default = 0.3, min = 0, max = 1 } }
 
-```toml
-[[automation]]
-target = "fx[0].drive"
+function process(block, p)
+  local d = 1 + p.drive * 24
+  for i = 1, #block do
+    block[i] = tanh(block[i] * d)
+  end
+end
 ```
 
-So a plugin author writes *only* the maths. Interactivity, hot-reload, knobs
-and automation come from the machinery that already exists.
+Save the file, hear it. No compile step, no toolchain, no restart — the watcher
+already reloads on save, and a `.lua` file is just another file in the project.
 
-The `Params` declaration is the one genuinely new piece of value: today
-`vscode-extension/webviews/lib/fxParams.ts` guesses knob ranges from name
-suffixes (`_hz` → 20–20000, log). With declared params the engine can hand the
-extension real ranges and labels, so a new plugin gets correct knobs with no
-UI work.
+That is the argument in one line: CodaW's premise is *your project is plain text
+you can edit and immediately hear*, and Lua is the only option that extends that
+promise to effects rather than carving out an exception to it.
 
-## The one piece of plumbing this needs
+Both kinds register into the same registry, so the mixer, the automation targets,
+validation and the mixer UI are written once and can't tell them apart.
 
-Every effect today is a stock miniaudio node wired up in
-`internal/audio/effect.go`. To run *our own* function on audio we need one
-custom miniaudio node whose process callback calls into Go. That's a single
-cgo file, and it's the same thing the compressor (currently passes audio
-through untouched) and the master limiter (currently just logs a warning)
-need anyway. Build it once, get all three.
+## Why this is viable now
 
-Two rules the plugin API has to enforce, both easy to document:
+An earlier draft of this document rejected a scripting language because *"an
+interpreter's garbage collector on the audio thread is a click in the output."*
+The ring buffer in the new engine removes that objection: the mixer runs on an
+ordinary goroutine and the device callback only copies bytes out of a ring, so a
+slow plugin eats buffer headroom instead of glitching the device. It has to be
+persistently too slow to be audible at all.
 
-1. **Don't allocate in the processing function.** Allocate state up front.
-2. **Don't block** — no file reads, no channels, no locks.
-
-These are the normal rules of audio programming, not Go-specific.
-
-## Distribution: copy the file, rebuild
-
-For now, sharing a plugin means sharing a `.go` file — a gist, a PR, a repo you
-copy from. It gets compiled into your `codaw` binary.
-
-That is a real limitation and worth stating plainly: you cannot install a
-plugin without rebuilding, so a non-technical user can't add one to a release
-binary. It is also the *only* option that costs nothing to build and nothing
-to learn, and it can be revisited once plugins exist and someone actually
-wants to distribute one.
+The API hands Lua a whole **block**, not one sample — crossing the Go↔Lua boundary
+is the expensive part, so it happens once per ~1024 frames rather than 96,000
+times a second.
 
 ## What we're deliberately not doing
 
-Each of these was considered and is a bigger project than the thing it buys:
-
-- **WebAssembly plugins.** Sandboxed, distributable as one cross-platform
-  artifact, any source language. Also: a wasm runtime in the audio path, an
-  ABI to design and version, a memory-marshalling story, and a `plugin build`
-  command. Right answer eventually; wrong answer first.
-- **Native `.dylib`/`.so` plugins** (Odin, C, Rust). Fast and simple to load,
-  but hands every plugin author a per-platform build matrix and every user an
-  unsandboxed binary from a stranger.
-- **Lua or another embedded interpreter.** No compile step, but an interpreted
-  per-sample loop is far too slow, and the interpreter's garbage collector
-  running on the audio thread is a click in the output.
-- **A declarative DSP graph in TOML** (effects built from primitives, no code).
-  Genuinely elegant and needs no toolchain — but a compile step turned out to
-  be acceptable, and that was the only thing this bought.
-- **Rust.** Excellent for DSP and completely at odds with "someone who knows a
-  little Go can write one in an afternoon."
-
-The Go decision is reversible in the direction that matters: `Params` +
-`Sample`/`Block` is a small enough surface that a wasm backend could implement
-the same shape later without changing how plugins are declared or used.
+- **WebAssembly.** Technically stronger — sandboxed, one artifact per platform,
+  any source language, near-native speed. It loses on the requirements that matter
+  here: the author needs a toolchain before writing a line, the artifact is a
+  binary so "your song is plain text" breaks, and the host needs an ABI plus
+  linear-memory marshalling. It is the documented escape hatch if Lua benchmarks
+  badly, and because it would register into the same registry, switching later
+  changes how plugins are *written*, not how they're used.
+- **Go's `plugin` package.** No Windows, and it demands the exact same Go version
+  and dependency set as the binary. Disqualified, not disfavoured.
+- **Native `.so` / `.dylib`.** A per-platform build matrix for every author, an
+  unsandboxed binary from a stranger for every user, and it needs cgo back.
+- **Compiling plugins into the binary.** Simplest of all, and rejected outright:
+  it makes a plugin part of a *release* instead of part of a *project*.
+- **A declarative DSP graph in TOML.** Still the simplest thing that could work,
+  and the honest fallback if Lua disappoints — but you could only combine
+  primitives we ship, never write a new algorithm.
