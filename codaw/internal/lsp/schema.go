@@ -1,5 +1,10 @@
 package lsp
 
+import (
+	"sort"
+	"strings"
+)
+
 // What CodaW's files may contain, section by section: the keys, what their values are, and a line of
 // documentation each. One table for completion (which keys fit here), hover (what is this key), and
 // later warnings about keys the engine ignores. It mirrors internal/project (the structs and their
@@ -60,7 +65,7 @@ var sections = map[fileKind]map[string][]key{
 		},
 		"clip": clipKeys,
 		"automation": {
-			{name: "target", kind: "string", doc: "What the lane changes: \"gain\", \"pan\", or an effect parameter as \"fx[N].key\"."},
+			{name: "target", kind: "string", doc: "What the lane changes: `gain`, `pan`, or a parameter of one of the track's effects as `fx[N].param`, N counting the `[[fx]]` from 0."},
 		},
 		"automation.point": {
 			{name: "beat", kind: "number", doc: "Where the point is.", detail: "beats, from 0"},
@@ -157,4 +162,68 @@ func findKey(keys []key, name string) (key, bool) {
 		}
 	}
 	return key{}, false
+}
+
+var sectionDocs = map[string]string{
+	"project":          "What the project is called and who made it.",
+	"transport":        "Tempo and audio format.",
+	"layout":           "The files that make up the project: the master, the buses, the tracks.",
+	"clip":             "A piece of audio on the timeline: a file, and where it starts and ends in beats. To split a clip, write two that share a file.",
+	"fx":               "An effect. Effects run in the order they are written; automation refers to them by position, as `fx[0]`, `fx[1]`, …",
+	"automation":       "A lane that changes one value over time, between its `[[automation.point]]`s.",
+	"automation.point": "A point of the `[[automation]]` above: a beat and the value there.",
+}
+
+// sectionOf finds a section among those a kind of file may have, and whether it is a list ([[x]]).
+func sectionOf(kind fileKind, name string) (array, ok bool) {
+	for _, header := range headers[kind] {
+		if strings.Trim(header, "[]") == name {
+			return strings.HasPrefix(header, "[["), true
+		}
+	}
+	return false, false
+}
+
+func effectNames() []string {
+	names := make([]string, 0, len(effects))
+	for name := range effects {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// keysOf are the keys a table of a document may have.
+func keysOf(kind fileKind, t *table) []key {
+	return keysFor(kind, t.name, t.text("type"))
+}
+
+// closest is the candidate a misspelled name most likely meant, or "".
+func closest(name string, candidates []string) string {
+	best, bestDistance := "", 3
+	for _, candidate := range candidates {
+		if d := distance(name, candidate); d < bestDistance {
+			best, bestDistance = candidate, d
+		}
+	}
+	return best
+}
+
+func distance(a, b string) int {
+	row := make([]int, len(b)+1)
+	for j := range row {
+		row[j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		previous := row[0]
+		row[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := previous
+			if a[i-1] != b[j-1] {
+				cost = min(previous, row[j], row[j-1]) + 1
+			}
+			previous, row[j] = row[j], cost
+		}
+	}
+	return row[len(b)]
 }

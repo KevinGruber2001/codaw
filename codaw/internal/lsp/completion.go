@@ -3,172 +3,324 @@ package lsp
 import (
 	"fmt"
 	"io/fs"
-	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
-	"github.com/KevinGruber2001/codaw/internal/project"
 	"github.com/tliron/glsp"
 	protocol "github.com/tliron/glsp/protocol_3_16"
 )
 
-// candidate is one suggestion for a value: its text (without quotes), whether it is a string (and so
-// needs quotes), and what to show next to it.
+// completionItem adds LSP 3.17's labelDetails to the library's item: text beside the label on
+// every row of the list, which is where an effect's type belongs.
+type completionItem struct {
+	protocol.CompletionItem
+	LabelDetails *labelDetails `json:"labelDetails,omitempty"`
+}
+
+type labelDetails struct {
+	Description string `json:"description,omitempty"`
+}
+
+// candidate is one suggestion for a value, without quotes.
 type candidate struct {
 	text   string
 	quoted bool
 	detail string
 	doc    string
+	beside string // shown beside the label on every row
 }
 
-// completion suggests what fits at the cursor: section headers on a "[" line, the keys a section may
-// still have, and values: the fixed ones from the schema, and the project's own (its buses, samples,
-// effect parameters, files).
+type place int
+
+const (
+	nowhere place = iota
+	onHeader
+	onKey
+	onValue
+)
+
+// cursor is what a position in a file is on, and the text a suggestion there would replace.
+type cursor struct {
+	place    place
+	table    *table
+	entry    *entry // the key a value belongs to
+	inString bool
+	closed   bool // the string has its closing quote
+	replace  span
+}
+
+func cursorAt(d *document, line, column int) cursor {
+	if line < 0 || line >= len(d.lines) {
+		return cursor{}
+	}
+	text := d.lines[line]
+	column = min(column, len(text))
+	before := text[:column]
+	if stripComment(before) != before {
+		return cursor{}
+	}
+	t, e := d.entryAt(line)
+	indent := len(before) - len(strings.TrimLeft(before, " \t"))
+	c := cursor{table: t}
+	switch {
+	case e != nil && (e.line < line || column > e.keyAt.end && strings.Contains(before, "=")):
+		c.place, c.entry = onValue, e
+		from := 0
+		if e.line == line {
+			from = strings.Index(before, "=") + 1
+		}
+		var quote byte
+		opened := 0
+		for i := from; i < column; i++ {
+			switch ch := before[i]; {
+			case quote == '"' && ch == '\\':
+				i++
+			case quote != 0:
+				if ch == quote {
+					quote = 0
+				}
+			case ch == '"' || ch == '\'':
+				quote, opened = ch, i
+			}
+		}
+		if quote != 0 {
+			c.inString = true
+			c.replace = span{opened + 1, column}
+			if i := strings.IndexByte(text[column:], quote); i >= 0 {
+				c.closed, c.replace.end = true, column+i
+			}
+			return c
+		}
+		c.replace = span{column, column}
+		for c.replace.start > from && !strings.ContainsRune(" \t,[=", rune(text[c.replace.start-1])) {
+			c.replace.start--
+		}
+		for c.replace.end < len(text) && !strings.ContainsRune(" \t,]#", rune(text[c.replace.end])) {
+			c.replace.end++
+		}
+	case strings.HasPrefix(before[indent:], "["):
+		c.place = onHeader
+		c.replace = span{indent, max(column, len(strings.TrimRight(stripComment(text), " \t")))}
+	case !strings.ContainsAny(before[indent:], " \t=\"'"):
+		c.place = onKey
+		c.replace = span{indent, column}
+		for c.replace.end < len(text) && isKeyChar(text[c.replace.end]) {
+			c.replace.end++
+		}
+	}
+	return c
+}
+
+func isKeyChar(ch byte) bool {
+	return ch == '_' || ch == '-' || ch >= '0' && ch <= '9' || ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z'
+}
+
+// completion suggests what fits at the cursor: section headers on a "[" line, the keys a section
+// may still have, and values: the fixed ones from the schema and the project's own.
 func (s *state) completion(ctx *glsp.Context, params *protocol.CompletionParams) (any, error) {
-	path, err := uriToPath(params.TextDocument.URI)
-	if err != nil {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	f, ok := s.file(params.TextDocument.URI)
+	if !ok {
 		return nil, nil
 	}
-	text := s.text(path)
-	c := cursorAt(text, int(params.Position.Line), int(params.Position.Character))
-	kind, p := projectOf(path)
-	if kind == kindUnknown {
-		return nil, nil
-	}
-	replace := protocol.Range{
-		Start: protocol.Position{Line: params.Position.Line, Character: protocol.UInteger(c.wordStart)},
-		End:   protocol.Position{Line: params.Position.Line, Character: protocol.UInteger(max(c.wordEnd, int(params.Position.Character)))},
+	line := int(params.Position.Line)
+	c := cursorAt(f.doc, line, f.doc.column(line, params.Position.Character))
+	replace := f.doc.rng(line, c.replace)
+
+	items := []completionItem{}
+	add := func(label, insert string, kind protocol.CompletionItemKind, v candidate) {
+		sortText := fmt.Sprintf("%03d", len(items))
+		it := completionItem{CompletionItem: protocol.CompletionItem{
+			Label:    label,
+			Kind:     &kind,
+			SortText: &sortText,
+			TextEdit: protocol.TextEdit{Range: replace, NewText: insert},
+		}}
+		if v.detail != "" {
+			it.Detail = &v.detail
+		}
+		if v.doc != "" {
+			it.Documentation = protocol.MarkupContent{Kind: protocol.MarkupKindMarkdown, Value: v.doc}
+		}
+		if v.beside != "" {
+			filter := label + " " + v.beside
+			it.FilterText, it.LabelDetails = &filter, &labelDetails{Description: v.beside}
+		}
+		items = append(items, it)
 	}
 
-	var items []protocol.CompletionItem
-	switch {
-	case c.onHeader:
-		for i, header := range headers[kind] {
-			items = append(items, item(i, header, header, protocol.CompletionItemKindModule, "", "", replace))
-		}
-	case c.onKey:
-		for i, k := range keysFor(kind, c.section, c.fxType) {
-			if c.present[k.name] {
-				continue // already set in this section
+	switch c.place {
+	case onHeader:
+		for _, header := range headers[f.kind] {
+			section := strings.Trim(header, "[]")
+			array, _ := sectionOf(f.kind, section)
+			if own, _, _ := parseHeader(f.doc.lines[line]); !array && len(f.doc.all(section)) > 0 && own != section {
+				continue
 			}
-			items = append(items, item(i, k.name, k.name+" = ", protocol.CompletionItemKindProperty, k.detail, k.doc, replace))
+			if parent, _, nested := strings.Cut(section, "."); nested && !f.hasAbove(parent, line) {
+				continue
+			}
+			add(header, header, protocol.CompletionItemKindModule, candidate{doc: sectionDocs[section]})
 		}
-	case c.onValue:
-		for i, v := range valuesFor(c, kind, p, path) {
+	case onKey:
+		for _, k := range keysOf(f.kind, c.table) {
+			if e := c.table.entry(k.name); e != nil && e.line != line {
+				continue
+			}
+			add(k.name, k.name+" = ", protocol.CompletionItemKindProperty, candidate{detail: k.detail, doc: k.doc})
+		}
+	case onValue:
+		for _, v := range f.values(c) {
 			insert := v.text
-			if v.quoted && !c.inString {
+			switch {
+			case v.quoted && !c.inString:
 				insert = `"` + v.text + `"`
+			case v.quoted && !c.closed:
+				insert = v.text + `"`
 			}
-			items = append(items, item(i, v.text, insert, protocol.CompletionItemKindValue, v.detail, v.doc, replace))
+			add(v.text, insert, protocol.CompletionItemKindValue, v)
 		}
 	}
 	return items, nil
 }
 
-func item(order int, label, insert string, kind protocol.CompletionItemKind, detail, doc string, replace protocol.Range) protocol.CompletionItem {
-	sortText := fmt.Sprintf("%03d", order) // in the schema's order, not alphabetical
-	it := protocol.CompletionItem{
-		Label:    label,
-		Kind:     &kind,
-		SortText: &sortText,
-		TextEdit: protocol.TextEdit{Range: replace, NewText: insert},
-	}
-	if detail != "" {
-		it.Detail = &detail
-	}
-	if doc != "" {
-		it.Documentation = protocol.MarkupContent{Kind: protocol.MarkupKindMarkdown, Value: doc}
-	}
-	return it
+// file is one file of a project, as the editor has it, with the project around it.
+type file struct {
+	path string
+	doc  *document
+	kind fileKind
+	view *view
 }
 
-// valuesFor are the values that fit the key the cursor is on.
-func valuesFor(c cursor, kind fileKind, p *project.Project, path string) []candidate {
-	root := filepath.Dir(path)
-	if projectFile, ok := findProjectFile(path); ok {
-		root = filepath.Dir(projectFile)
+func (s *state) file(uri string) (*file, bool) {
+	path, err := uriToPath(uri)
+	if err != nil {
+		return nil, false
 	}
-	var out []candidate
+	projectFile, ok := findProjectFile(path)
+	if !ok {
+		return nil, false
+	}
+	v := s.load(projectFile)
+	f := &file{path: path, doc: v.docs[path], kind: v.kinds[path], view: v}
+	if f.doc == nil {
+		text, ok := s.source(path)
+		if !ok {
+			return nil, false
+		}
+		f.doc, f.kind = parse(text), kindOf(path)
+	}
+	return f, f.kind != kindUnknown
+}
 
-	// Fixed values from the schema: booleans, sample rates, time signatures.
-	if k, ok := findKey(keysFor(kind, c.section, c.fxType), c.key); ok && len(k.values) > 0 {
+func (f *file) hasAbove(section string, line int) bool {
+	for _, t := range f.doc.all(section) {
+		if t.line < line {
+			return true
+		}
+	}
+	return false
+}
+
+// values are the values that fit the key the cursor is on.
+func (f *file) values(c cursor) []candidate {
+	var out []candidate
+	section, name := c.table.name, c.entry.key
+	if k, ok := findKey(keysOf(f.kind, c.table), name); ok && len(k.values) > 0 {
 		for _, v := range k.values {
 			out = append(out, candidate{text: strings.Trim(v, `"`), quoted: strings.HasPrefix(v, `"`), doc: k.doc})
 		}
 		return out
 	}
 
+	root := f.view.root
 	switch {
-	case c.key == "bus" && c.section == "" && kind == kindTrack && p != nil:
-		for _, bus := range p.Buses {
-			out = append(out, candidate{text: bus.ID, quoted: true, detail: fmt.Sprintf("%.1f dB", bus.Gain), doc: rel(root, bus.SourceFile)})
+	case name == "bus" && section == "" && f.kind == kindTrack && f.view.project != nil:
+		for _, bus := range f.view.project.Buses {
+			out = append(out, candidate{text: bus.ID, quoted: true, detail: fmt.Sprintf("%.1f dB", bus.Gain), doc: f.busSummary(bus.ID)})
 		}
-	case c.key == "file" && c.section == "clip":
-		for _, file := range filesIn(root, isAudio) {
-			out = append(out, candidate{text: file, quoted: true})
+	case name == "file" && section == "clip":
+		for _, path := range filesIn(root, isAudio) {
+			out = append(out, candidate{text: path, quoted: true, detail: audioInfo(filepath.Join(root, filepath.FromSlash(path)))})
 		}
-	case c.key == "type" && c.section == "fx":
-		names := make([]string, 0, len(effects))
-		for name := range effects {
-			names = append(names, name)
+	case name == "type" && section == "fx":
+		for _, effect := range effectNames() {
+			out = append(out, candidate{text: effect, quoted: true, doc: effectSummary(effect)})
 		}
-		sort.Strings(names)
-		for _, name := range names {
-			out = append(out, candidate{text: name, quoted: true, doc: effects[name].doc})
-		}
-	case c.key == "target" && c.section == "automation":
-		out = append(out,
-			candidate{text: "gain", quoted: true, detail: "dB", doc: "The track's level."},
-			candidate{text: "pan", quoted: true, detail: "-1 to 1", doc: "The track's position in the stereo field."})
-		for i, fxType := range fxTypesIn(c.lines) {
-			for _, param := range effects[fxType].params {
-				out = append(out, candidate{text: fmt.Sprintf("fx[%d].%s", i, param.name), quoted: true, detail: param.detail,
-					doc: fmt.Sprintf("%s of the %s.", param.doc, fxType)})
-			}
-		}
-	case c.key == "master" && c.section == "layout":
-		for _, file := range filesIn(root, func(p string) bool {
+	case name == "target" && section == "automation":
+		out = f.targets()
+	case name == "master" && section == "layout":
+		for _, path := range filesIn(root, func(p string) bool {
 			return filepath.Ext(p) == ".toml" && !strings.Contains(p, "/") && p != "project.toml"
 		}) {
-			out = append(out, candidate{text: file, quoted: true})
+			out = append(out, candidate{text: path, quoted: true})
 		}
-	case (c.key == "tracks" || c.key == "buses") && c.section == "layout" && c.inString:
-		for _, file := range filesIn(root, func(p string) bool { return strings.HasPrefix(p, c.key+"/") && filepath.Ext(p) == ".toml" }) {
-			out = append(out, candidate{text: file, quoted: true})
+	case (name == "tracks" || name == "buses") && section == "layout":
+		for _, path := range filesIn(root, func(p string) bool { return strings.HasPrefix(p, name+"/") && filepath.Ext(p) == ".toml" }) {
+			if !strings.Contains(c.entry.value, `"`+path+`"`) {
+				out = append(out, candidate{text: path, quoted: true})
+			}
 		}
 	}
 	return out
 }
 
-// projectOf loads the project a file belongs to, from disk, and says what the file is in it. The kind
-// comes from the project's [layout] when it loads, from where the file is otherwise.
-func projectOf(path string) (fileKind, *project.Project) {
-	projectFile, ok := findProjectFile(path)
+// targets are what an automation lane of this track can change: its gain and pan, and every
+// parameter of every effect it has. An effect is addressed by position, which says little, so
+// each parameter carries its effect's type and shows the effect as it is written in the file.
+func (f *file) targets() []candidate {
+	d := f.doc
+	var out []candidate
+	for _, name := range []string{"gain", "pan"} {
+		t, _ := resolveTarget(d, name)
+		out = append(out, candidate{text: name, quoted: true, detail: t.key.detail, doc: fmt.Sprintf("%s Automates %s, %s.", t.key.doc, t.describe(), t.now(d))})
+	}
+	for i, fx := range d.all("fx") {
+		fxType := fx.text("type")
+		for _, param := range effects[fxType].params {
+			t, _ := resolveTarget(d, fmt.Sprintf("fx[%d].%s", i, param.name))
+			out = append(out, candidate{
+				text: t.text, quoted: true, beside: fxType,
+				detail: strings.TrimSuffix(fxType+" · "+param.detail, " · "),
+				doc:    fmt.Sprintf("%s Automates %s (line %d), %s.\n\n```toml\n%s\n```", param.doc, t.describe(), fx.line+1, t.now(d), d.block(fx)),
+			})
+		}
+	}
+	return out
+}
+
+func (f *file) busSummary(id string) string {
+	if f.view.project == nil {
+		return ""
+	}
+	for _, bus := range f.view.project.Buses {
+		if bus.ID != id {
+			continue
+		}
+		summary := fmt.Sprintf("Bus `%s` · %.1f dB · %s", bus.ID, bus.Gain, rel(f.view.root, bus.SourceFile))
+		for _, fx := range bus.FX {
+			summary += " · " + fx.Type
+		}
+		return summary
+	}
+	return ""
+}
+
+func effectSummary(name string) string {
+	effect, ok := effects[name]
 	if !ok {
-		return kindUnknown, nil
+		return ""
 	}
-	p, err := project.Load(projectFile)
-	if err != nil {
-		return kindOf(path), nil
-	}
-	switch {
-	case path == projectFile:
-		return kindProject, p
-	case p.Master != nil && p.Master.SourceFile == path:
-		return kindMaster, p
-	}
-	for _, bus := range p.Buses {
-		if bus.SourceFile == path {
-			return kindBus, p
+	var md strings.Builder
+	md.WriteString(effect.doc)
+	for _, param := range effect.params {
+		fmt.Fprintf(&md, "\n- `%s`: %s", param.name, param.doc)
+		if param.detail != "" {
+			fmt.Fprintf(&md, " (%s)", param.detail)
 		}
 	}
-	for _, track := range p.Tracks {
-		if track.SourceFile == path {
-			return kindTrack, p
-		}
-	}
-	return kindOf(path), p
+	return md.String()
 }
 
 func isAudio(path string) bool {
@@ -186,7 +338,7 @@ func filesIn(root string, match func(rel string) bool) []string {
 		if err != nil {
 			return nil
 		}
-		if d.IsDir() && strings.HasPrefix(d.Name(), ".") && path != root {
+		if d.IsDir() && path != root && (strings.HasPrefix(d.Name(), ".") || d.Name() == "node_modules") {
 			return filepath.SkipDir
 		}
 		if !d.IsDir() {
@@ -197,24 +349,4 @@ func filesIn(root string, match func(rel string) bool) []string {
 		return nil
 	})
 	return out
-}
-
-func rel(root, path string) string {
-	r, err := filepath.Rel(root, path)
-	if err != nil {
-		return path
-	}
-	return filepath.ToSlash(r)
-}
-
-// text is a file's current text: the editor's if it is open, the disk's otherwise.
-func (s *state) text(path string) string {
-	s.mu.Lock()
-	text, ok := s.documents[path]
-	s.mu.Unlock()
-	if ok {
-		return text
-	}
-	data, _ := os.ReadFile(path)
-	return string(data)
 }
