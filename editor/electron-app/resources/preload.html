@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <style>
+        html,
+        body {
+            /* The plate color of the application icon, so the window starts out in CodaW's own dark. */
+            background-color: #17181c;
+        }
+
+        .theia-preload {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            /* Copied from the core stylesheet: without them there is a flicker when Theia's CSS loads. */
+
+            /* The default loading animation is replaced by the one below. */
+            background-image: none;
+        }
+
+        .theia-preload::after {
+            content: none;
+        }
+
+        .codaw-preload {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        .codaw-preload svg {
+            width: 128px;
+            height: 128px;
+        }
+
+        /*
+         * The three bars of the mark animate like a level meter, so the wait reads as the application
+         * warming up rather than as a spinner that happens to be in front of it.
+         */
+        .codaw-bar {
+            transform-box: fill-box;
+            transform-origin: center;
+            animation: codaw-level 1.1s ease-in-out infinite;
+        }
+
+        .codaw-bar-1 {
+            animation-delay: -0.75s;
+        }
+
+        .codaw-bar-2 {
+            animation-delay: -0.35s;
+        }
+
+        @keyframes codaw-level {
+
+            0%,
+            100% {
+                transform: scaleY(0.4);
+            }
+
+            50% {
+                transform: scaleY(1);
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .codaw-bar {
+                animation: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="codaw-preload">
+        <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Loading CodaW">
+            <g transform="translate(256,256) scale(4)" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M -30 -34 H -42 V 34 H -30" fill="none" stroke="#F5F5F6" stroke-width="10" />
+                <path d="M 30 -34 H 42 V 34 H 30" fill="none" stroke="#F5F5F6" stroke-width="10" />
+                <rect class="codaw-bar codaw-bar-1" x="-22" y="-14" width="11" height="28" rx="5" fill="#F5F5F6" />
+                <rect class="codaw-bar codaw-bar-2" x="-6" y="-24" width="11" height="48" rx="5" fill="#FF6A5A" />
+                <rect class="codaw-bar codaw-bar-3" x="10" y="-18" width="11" height="36" rx="5" fill="#F5F5F6" />
+            </g>
+        </svg>
+    </div>
+</body>
+
+</html>
