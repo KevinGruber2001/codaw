@@ -1,0 +1,21 @@
+/********************************************************************************
+ * Copyright (C) 2026 Kevin Gruber.
+ *
+ * SPDX-License-Identifier: MIT
+ ********************************************************************************/
+
+/*
+ * The track colors, by a track's position in the project's [layout]: shared by every view that shows
+ * tracks (the arrangement, the mixer), so a track has the same color everywhere. Chosen to read on both
+ * dark and light themes.
+ */
+:root {
+    --codaw-track-color-0: #ff6a5a;
+    --codaw-track-color-1: #f2b84b;
+    --codaw-track-color-2: #4fc7a2;
+    --codaw-track-color-3: #5aa9ff;
+    --codaw-track-color-4: #b48cff;
+    --codaw-track-color-5: #ff8fc7;
+    --codaw-track-color-6: #8fd16a;
+    --codaw-track-color-7: #4fd1d9;
+}
