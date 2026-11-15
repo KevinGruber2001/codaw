@@ -1,0 +1,67 @@
+/********************************************************************************
+ * Copyright (C) 2026 Kevin Gruber.
+ *
+ * SPDX-License-Identifier: MIT
+ ********************************************************************************/
+
+/* A clip in the Properties view (experimental). */
+.codaw-properties {
+    padding: 8px 12px;
+    overflow: auto;
+    user-select: text;
+}
+
+.codaw-properties-title {
+    margin: 0;
+    font-size: calc(var(--theia-ui-font-size1) * 1.1);
+}
+
+.codaw-properties-subtitle {
+    margin-bottom: 8px;
+    color: var(--theia-descriptionForeground);
+    font-size: var(--theia-ui-font-size0);
+}
+
+.codaw-properties-section {
+    margin-top: 10px;
+}
+
+.codaw-properties-section-title {
+    padding-bottom: 2px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--theia-panel-border);
+    color: var(--theia-descriptionForeground);
+    font-size: var(--theia-ui-font-size0);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.codaw-properties table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.codaw-properties td {
+    padding: 2px 0;
+    vertical-align: baseline;
+    overflow-wrap: anywhere;
+}
+
+/* Labels as wide as the longest one, never squeezed into the value next to them. */
+.codaw-properties td.codaw-properties-label {
+    width: 1%;
+    padding-right: 12px;
+    white-space: nowrap;
+    overflow-wrap: normal;
+    color: var(--theia-descriptionForeground);
+}
+
+.codaw-properties-dim {
+    margin-left: 4px;
+    color: var(--theia-descriptionForeground);
+    font-size: var(--theia-ui-font-size0);
+}
+
+.codaw-properties-error {
+    color: var(--theia-errorForeground);
+}
