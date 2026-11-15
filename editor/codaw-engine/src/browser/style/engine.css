@@ -1,0 +1,51 @@
+/********************************************************************************
+ * Copyright (C) 2026 Kevin Gruber.
+ *
+ * SPDX-License-Identifier: MIT
+ ********************************************************************************/
+
+.codaw-engine-log {
+    overflow: auto;
+    padding: 4px 0;
+    font-family: var(--theia-code-font-family);
+    font-size: var(--theia-code-font-size);
+    line-height: 1.5;
+    user-select: text;
+}
+
+.codaw-engine-log-line {
+    padding: 0 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.codaw-engine-log-status {
+    color: var(--theia-descriptionForeground);
+}
+
+.codaw-engine-log-warning {
+    color: var(--theia-editorWarning-foreground);
+}
+
+.codaw-engine-log-error {
+    color: var(--theia-errorForeground);
+}
+
+.codaw-engine-log-empty {
+    padding: 12px;
+    color: var(--theia-descriptionForeground);
+}
+
+/* The engine's status in the status bar: the dot takes the state's color, an error the whole item. */
+#theia-statusBar .codaw-engine-status-running .codicon {
+    color: var(--theia-terminal-ansiGreen);
+}
+
+#theia-statusBar .codaw-engine-status-starting .codicon {
+    color: var(--theia-terminal-ansiYellow);
+}
+
+#theia-statusBar .codaw-engine-status-error {
+    background-color: var(--theia-statusBarItem-errorBackground, var(--theia-errorForeground));
+    color: var(--theia-statusBarItem-errorForeground, var(--theia-statusBar-foreground));
+}
