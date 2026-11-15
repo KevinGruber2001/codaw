@@ -2,6 +2,7 @@ id   = "pad"
 gain = -6.0
 pan  = -0.1
 solo = false
+bus = "drums" 
 
 [[fx]]
 type      = "reverb"
@@ -11,6 +12,14 @@ wet       = 0.4
 [[clip]]
 file  = "samples/pad_cmaj.wav"
 start = 4.0
-end   = 28.0
-loop  = false
+end   = 25.0
+loop  = true
 gain  = -20.0
+
+[[clip]]
+file   = "samples/test_tone.wav"
+start  = 32.0
+end    = 36.267
+loop   = false
+gain   = 0.0
+offset = 0.0
