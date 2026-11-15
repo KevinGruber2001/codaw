@@ -1,0 +1,57 @@
+{
+  "private": true,
+  "name": "codaw-product",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "CodaW, the product: branding, About, Welcome, Help, and the default layout of the feature packages",
+  "license": "MIT",
+  "keywords": [
+    "theia-extension"
+  ],
+  "files": [
+    "lib",
+    "src"
+  ],
+  "dependencies": {
+    "@theia/core": "1.77.0",
+    "@theia/keymaps": "1.77.0",
+    "@theia/markers": "1.77.0",
+    "@theia/outline-view": "1.77.0",
+    "@theia/workspace": "1.77.0",
+    "codaw-arrangement": "0.1.0",
+    "codaw-clip-editor": "0.1.0",
+    "codaw-engine": "0.1.0",
+    "codaw-inspector": "0.1.0",
+    "codaw-library": "0.1.0",
+    "codaw-mixer": "0.1.0",
+    "codaw-project": "0.1.0",
+    "codaw-transport": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "rimraf": "^5.0.0",
+    "typescript": "~5.9.3"
+  },
+  "scripts": {
+    "compile": "npm run clean && npm run build",
+    "clean": "rimraf lib",
+    "build": "tsc",
+    "watch": "tsc -w"
+  },
+  "theiaExtensions": [
+    {
+      "frontend": "lib/browser/codaw-product-frontend-module",
+      "electronMain": "lib/electron-main/codaw-product-main-module"
+    }
+  ],
+  "peerDependencies": {
+    "react": "^19.2.0"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    "./lib/*.json": "./lib/*.json",
+    "./lib/*.js": "./lib/*.js",
+    "./lib/*": "./lib/*.js",
+    "./*": "./*"
+  }
+}
