@@ -78,7 +78,7 @@ func (f *FX) UnmarshalTOML(data any) error {
 //	gain  = 0.0
 type Clip struct {
 	// File is the path to the audio file, relative to the project root.
-	// Supported formats depend on miniaudio: WAV, MP3, FLAC, OGG.
+	// WAV only: 16- or 24-bit integer PCM, mono or stereo (see internal/sample).
 	File string `toml:"file" validate:"required"`
 
 	// Start is the beat position where this clip begins playing.

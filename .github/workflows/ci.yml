@@ -13,7 +13,7 @@ jobs:
   # ───────────────────────────────────────────────
   #  Go engine — build, vet, test on all 3 OSes.
   #
-  #  CodaW uses cgo (miniaudio), which can't be cleanly cross-compiled, so we
+  #  CodaW uses cgo (malgo, for the audio device), which can't be cleanly cross-compiled, so we
   #  build natively on each OS. The runners already have a C compiler:
   #  clang (macOS), gcc (Linux), MinGW gcc (Windows). This is the same matrix
   #  the future release workflow reuses to produce downloadable binaries.
@@ -29,7 +29,7 @@ jobs:
       run:
         working-directory: codaw # the Go module lives in the codaw/ subdir
     env:
-      CGO_ENABLED: "1" # required for miniaudio
+      CGO_ENABLED: "1" # required for malgo
     steps:
       - uses: actions/checkout@v4
 

@@ -3,14 +3,13 @@ package lsp
 import (
 	"sort"
 	"strings"
+
+	"github.com/KevinGruber2001/codaw/internal/schema"
 )
 
-// What CodaW's files may contain, section by section: the keys, what their values are, and a line of
-// documentation each. One table for completion (which keys fit here), hover (what is this key), and
-// later warnings about keys the engine ignores. It mirrors internal/project (the structs and their
-// validation) and internal/engine/fx.go (the effects and their parameters).
+// What CodaW's files may contain comes from internal/schema. This file only puts it in the shape
+// completion, hover and the checks ask for.
 
-// fileKind is what a file is in the project, which decides the keys it may have.
 type fileKind int
 
 const (
@@ -21,125 +20,100 @@ const (
 	kindMaster
 )
 
-// key is one key a section may have.
+var schemaKinds = map[schema.FileKind]fileKind{
+	schema.ProjectFile: kindProject,
+	schema.TrackFile:   kindTrack,
+	schema.BusFile:     kindBus,
+	schema.MasterFile:  kindMaster,
+}
+
+// key is one key a section may have, as shown to the user.
 type key struct {
-	name string
-	// kind of value: "number", "string", "bool" or "array".
-	kind string
-	doc  string
-	// unit and valid range, as shown to the user ("dB, -60 to 6").
-	detail string
-	// values to suggest after "key = ", if the value is one of a fixed few.
-	values []string
+	name   string
+	kind   string   // "number", "string", "bool" or "array"
+	doc    string   // one line
+	detail string   // unit, range and default: "dB, -60 to 6"
+	values []string // what to suggest after "key = ", if the value is one of a few
 }
 
-// sections lists, per kind of file, the keys of each section. The top of a file (before any header) is
-// the section "". Arrays of tables are named without brackets: "clip", "automation.point".
-var sections = map[fileKind]map[string][]key{
-	kindProject: {
-		"project": {
-			{name: "name", kind: "string", doc: "The project's name."},
-			{name: "version", kind: "string", doc: "A version of your choosing."},
-			{name: "author", kind: "string", doc: "Who made it."},
-		},
-		"transport": {
-			{name: "bpm", kind: "number", doc: "Tempo, in beats per minute.", detail: "20 to 300"},
-			{name: "time_sig", kind: "string", doc: "Time signature: beats per bar / beat unit.", values: []string{`"4/4"`, `"3/4"`, `"6/8"`}},
-			{name: "sample_rate", kind: "number", doc: "Sample rate the project renders at, in Hz.", values: []string{"44100", "48000", "88200", "96000"}},
-			{name: "bit_depth", kind: "number", doc: "Bit depth of rendered files.", values: []string{"16", "24", "32"}},
-		},
-		"layout": {
-			{name: "master", kind: "string", doc: "The master file, relative to project.toml."},
-			{name: "buses", kind: "array", doc: "The bus files, in order."},
-			{name: "tracks", kind: "array", doc: "The track files, in the order the views show them."},
-		},
-	},
-	kindTrack: {
-		"": {
-			{name: "id", kind: "string", doc: "The track's name; unique in the project."},
-			{name: "bus", kind: "string", doc: "The bus this track feeds. Without one, it goes straight to the master."},
-			{name: "gain", kind: "number", doc: "The track's level.", detail: "dB, -60 to 6"},
-			{name: "pan", kind: "number", doc: "Position in the stereo field.", detail: "-1 (left) to 1 (right)"},
-			{name: "mute", kind: "bool", doc: "Silences the track.", values: []string{"true", "false"}},
-			{name: "solo", kind: "bool", doc: "Plays only the soloed tracks.", values: []string{"true", "false"}},
-		},
-		"clip": clipKeys,
-		"automation": {
-			{name: "target", kind: "string", doc: "What the lane changes: `gain`, `pan`, or a parameter of one of the track's effects as `fx[N].param`, N counting the `[[fx]]` from 0."},
-		},
-		"automation.point": {
-			{name: "beat", kind: "number", doc: "Where the point is.", detail: "beats, from 0"},
-			{name: "value", kind: "number", doc: "The target's value there; in between, it changes in a straight line."},
-		},
-	},
-	kindBus: {
-		"": {
-			{name: "id", kind: "string", doc: "The bus's name, which tracks send to with bus = \"…\"."},
-			{name: "gain", kind: "number", doc: "The bus's level.", detail: "dB, -60 to 6"},
-		},
-	},
-	kindMaster: {
-		"": {
-			{name: "gain", kind: "number", doc: "The master's level.", detail: "dB, -60 to 6"},
-			{name: "limiter", kind: "bool", doc: "A limiter on the master, against clipping. (Not implemented in the engine yet.)", values: []string{"true", "false"}},
-		},
-	},
-}
-
-var clipKeys = []key{
-	{name: "file", kind: "string", doc: "The audio file, relative to project.toml."},
-	{name: "start", kind: "number", doc: "Where the clip starts.", detail: "beats"},
-	{name: "end", kind: "number", doc: "Where the clip ends; after start.", detail: "beats"},
-	{name: "offset", kind: "number", doc: "Where in the audio file the clip begins.", detail: "seconds, from 0"},
-	{name: "loop", kind: "bool", doc: "Repeats the audio until the clip ends: from the offset once, then from the file's start.", values: []string{"true", "false"}},
-	{name: "gain", kind: "number", doc: "The clip's level, on top of the track's.", detail: "dB, -60 to 6"},
-}
-
-// effects are the effect types the engine knows, with their parameters. Every kind of file but the
-// project has [[fx]].
-var effects = map[string]struct {
+type effect struct {
 	doc    string
 	params []key
-}{
-	"eq_3band": {
-		doc: "A three-band equalizer: low shelf, peak, high shelf.",
-		params: []key{
-			{name: "low_hz", kind: "number", doc: "Low shelf frequency.", detail: "Hz, default 100"},
-			{name: "low_db", kind: "number", doc: "Low shelf boost or cut.", detail: "dB, default 0"},
-			{name: "mid_hz", kind: "number", doc: "Peak frequency.", detail: "Hz, default 1000"},
-			{name: "mid_db", kind: "number", doc: "Peak boost or cut.", detail: "dB, default 0"},
-			{name: "high_hz", kind: "number", doc: "High shelf frequency.", detail: "Hz, default 8000"},
-			{name: "high_db", kind: "number", doc: "High shelf boost or cut.", detail: "dB, default 0"},
-		},
-	},
-	"reverb": {
-		doc: "Reverb (an echo approximation for now).",
-		params: []key{
-			{name: "room_size", kind: "number", doc: "Size of the room.", detail: "0 to 1, default 0.5"},
-			{name: "wet", kind: "number", doc: "How much of the effect is heard.", detail: "0 to 1, default 0.3"},
-		},
-	},
-	"compressor": {
-		doc: "A compressor. (No DSP in the engine yet: the audio passes through unchanged.)",
-		params: []key{
-			{name: "threshold", kind: "number", doc: "Level above which it compresses.", detail: "dB"},
-			{name: "ratio", kind: "number", doc: "How strongly: 4 means 4 dB over the threshold come out as 1."},
-			{name: "attack_ms", kind: "number", doc: "How fast it reacts.", detail: "ms"},
-			{name: "release_ms", kind: "number", doc: "How fast it lets go.", detail: "ms"},
-			{name: "makeup_db", kind: "number", doc: "Level added after compressing.", detail: "dB"},
-		},
-	},
 }
 
-// fxTypeKey is the key every [[fx]] has, whatever its type.
-var fxTypeKey = key{name: "type", kind: "string", doc: "Which effect: \"eq_3band\", \"reverb\" or \"compressor\"."}
+var (
+	// sections lists, per kind of file, the keys of each section; "" is the top of a file.
+	sections = map[fileKind]map[string][]key{}
+	// headers are the sections a kind of file may have, as typed: "[transport]", "[[clip]]".
+	headers     = map[fileKind][]string{}
+	sectionDocs = map[string]string{}
+	effects     = map[string]effect{}
+	fxTypeKey   key
+)
 
-// headers are the sections a kind of file may have, as typed: for completing a "[" line.
-var headers = map[fileKind][]string{
-	kindProject: {"[project]", "[transport]", "[layout]"},
-	kindTrack:   {"[[clip]]", "[[fx]]", "[[automation]]", "[[automation.point]]"},
-	kindBus:     {"[[fx]]"},
-	kindMaster:  {"[[fx]]"},
+func init() {
+	for _, file := range schema.Files {
+		kind := schemaKinds[file.Kind]
+		sections[kind] = map[string][]key{}
+		for _, section := range file.Sections {
+			sections[kind][section.Name] = toKeys(section.Keys)
+			if section.Name == "" {
+				continue
+			}
+			header := "[" + section.Name + "]"
+			if section.List {
+				header = "[" + header + "]"
+			}
+			headers[kind] = append(headers[kind], header)
+			sectionDocs[section.Name] = section.Doc
+		}
+	}
+	for _, e := range schema.Effects {
+		effects[e.Name] = effect{doc: e.Doc, params: toKeys(e.Params)}
+	}
+	fxTypeKey, _ = findKey(sections[kindTrack]["fx"], "type")
+	fxTypeKey.doc += " One of `" + strings.Join(effectNames(), "`, `") + "`."
+}
+
+func toKeys(keys []schema.Key) []key {
+	out := make([]key, len(keys))
+	for i, k := range keys {
+		out[i] = key{name: k.Name, kind: string(k.Kind), doc: k.Doc, detail: detail(k)}
+		switch {
+		case k.Kind == schema.List:
+			out[i].kind = "array"
+		case k.Kind == schema.Bool:
+			out[i].values = []string{"true", "false"}
+		}
+		for _, value := range k.OneOf {
+			out[i].values = append(out[i].values, schema.Format(value))
+		}
+		for _, value := range k.Suggest {
+			out[i].values = append(out[i].values, `"`+value+`"`)
+		}
+	}
+	return out
+}
+
+// detail is a key's unit, range and default in a few words: "dB, -60 to 6", "Hz, 20 to 20000,
+// default 100", "seconds, from 0". A default of zero goes without saying.
+func detail(k schema.Key) string {
+	var parts []string
+	if k.Unit != "" {
+		parts = append(parts, k.Unit)
+	}
+	switch {
+	case k.Min != nil && k.Max != nil:
+		parts = append(parts, schema.Format(*k.Min)+" to "+schema.Format(*k.Max))
+	case k.Min != nil:
+		parts = append(parts, "from "+schema.Format(*k.Min))
+	case k.Max != nil:
+		parts = append(parts, "up to "+schema.Format(*k.Max))
+	}
+	if value, ok := schema.AsNumber(k.Default); ok && value != 0 {
+		parts = append(parts, "default "+schema.Format(value))
+	}
+	return strings.Join(parts, ", ")
 }
 
 // keysFor are the keys of a section in a kind of file; fxType is the type of the [[fx]] the cursor
@@ -155,6 +129,11 @@ func keysFor(kind fileKind, section, fxType string) []key {
 	return sections[kind][section]
 }
 
+// keysOf are the keys a table of a document may have.
+func keysOf(kind fileKind, t *table) []key {
+	return keysFor(kind, t.name, t.text("type"))
+}
+
 func findKey(keys []key, name string) (key, bool) {
 	for _, k := range keys {
 		if k.name == name {
@@ -162,16 +141,6 @@ func findKey(keys []key, name string) (key, bool) {
 		}
 	}
 	return key{}, false
-}
-
-var sectionDocs = map[string]string{
-	"project":          "What the project is called and who made it.",
-	"transport":        "Tempo and audio format.",
-	"layout":           "The files that make up the project: the master, the buses, the tracks.",
-	"clip":             "A piece of audio on the timeline: a file, and where it starts and ends in beats. To split a clip, write two that share a file.",
-	"fx":               "An effect. Effects run in the order they are written; automation refers to them by position, as `fx[0]`, `fx[1]`, …",
-	"automation":       "A lane that changes one value over time, between its `[[automation.point]]`s.",
-	"automation.point": "A point of the `[[automation]]` above: a beat and the value there.",
 }
 
 // sectionOf finds a section among those a kind of file may have, and whether it is a list ([[x]]).
@@ -191,11 +160,6 @@ func effectNames() []string {
 	}
 	sort.Strings(names)
 	return names
-}
-
-// keysOf are the keys a table of a document may have.
-func keysOf(kind fileKind, t *table) []key {
-	return keysFor(kind, t.name, t.text("type"))
 }
 
 // closest is the candidate a misspelled name most likely meant, or "".

@@ -27,6 +27,7 @@ package wav
 import (
 	"bufio"
 	"encoding/binary"
+	"io"
 	"os"
 )
 
@@ -55,6 +56,12 @@ func Create(path string, sampleRate uint32, channels uint16) (*Writer, error) {
 	}
 	w := &Writer{f: f, buf: bufio.NewWriter(f), sampleRate: sampleRate, channels: channels}
 	if err := w.writeHeader(); err != nil {
+		f.Close()
+		return nil, err
+	}
+	// writeHeader writes with WriteAt, which leaves the file offset where it was. The samples go
+	// after the header, not over it.
+	if _, err := f.Seek(headerSize, io.SeekStart); err != nil {
 		f.Close()
 		return nil, err
 	}

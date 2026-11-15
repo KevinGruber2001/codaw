@@ -14,6 +14,7 @@ import { MonacoEditorModel } from '@theia/monaco/lib/browser/monaco-editor-model
 import { MonacoTextModelService } from '@theia/monaco/lib/browser/monaco-text-model-service';
 import { CodawProject, ProjectProblem } from '../common/project-model.js';
 import { MemberFiles, Toml, layoutFiles, parseTomlText, toProject } from './project-reader.js';
+import { SchemaService } from './schema-service.js';
 
 /** How long to wait after a change before reading again, so a burst of saves is read once. */
 const RELOAD_DELAY_MS = 50;
@@ -41,6 +42,9 @@ export class ProjectService {
 
     @inject(MonacoTextModelService)
     protected readonly textModels: MonacoTextModelService;
+
+    @inject(SchemaService)
+    protected readonly schemaService: SchemaService;
 
     protected readonly onDidChangeEmitter = new Emitter<CodawProject | undefined>();
     /** Fires whenever the project was read again, or closed. */
@@ -108,6 +112,8 @@ export class ProjectService {
     }
 
     protected async read(): Promise<void> {
+        // The schema first: a view that shows a project can then count on the schema being there, if there is one.
+        await this.schemaService.ready;
         const root = (await this.workspaceService.roots)[0]?.resource;
         const projectUri = root?.resolve('project.toml');
         if (!projectUri || !await this.fileService.exists(projectUri)) {

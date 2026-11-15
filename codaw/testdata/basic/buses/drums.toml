@@ -1,5 +1,5 @@
 id   = "drums"
-gain = -8.3
+gain = -10.0
 
 [[fx]]
 type         = "compressor"

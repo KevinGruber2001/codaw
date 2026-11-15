@@ -1,21 +1,22 @@
 // Package watcher monitors project TOML files for changes and applies
 // them to the state store reactively.
 //
-// When a file changes on disk, the watcher:
-//  1. Re-parses the changed file
-//  2. Diffs it against current in-memory state
-//  3. Calls store.Apply() with targeted mutations for changed values
-//  4. Falls back to store.Reload() for structural changes
+// When a file changes on disk, the watcher reads it, checks that the project is still valid with it,
+// and puts the new project in the store. It does not work out what changed: the engine reads the
+// whole project anyway, and plays whatever is new from its next block.
 package watcher
 
 import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/KevinGruber2001/codaw/internal/project"
+	"github.com/KevinGruber2001/codaw/internal/schema"
 	"github.com/KevinGruber2001/codaw/internal/state"
 	"github.com/fsnotify/fsnotify"
 )
@@ -40,6 +41,10 @@ type Watcher struct {
 	// Go way to broadcast "stop" to multiple goroutines — all receivers
 	// see a closed channel immediately.
 	done chan struct{}
+
+	// rejected are files whose last change would have made the project invalid. They are tried again
+	// with every later change: renaming a bus takes two saves, and neither is valid without the other.
+	rejected map[string]bool
 }
 
 // New creates a Watcher that monitors all project files and applies
@@ -57,6 +62,8 @@ func New(store *state.Store) (*Watcher, error) {
 		store: store,
 		fsw:   fsw,
 		done:  make(chan struct{}),
+
+		rejected: make(map[string]bool),
 	}, nil
 }
 
@@ -111,89 +118,43 @@ func (w *Watcher) Stop() {
 //  Event loop
 // ─────────────────────────────────────────────
 
-// loop is the main goroutine — it runs forever until Stop() is called.
-//
-// It uses a select statement to wait for either:
-//   - a filesystem event (file changed)
-//   - an error from fsnotify
-//   - a signal on the done channel (Stop() was called)
-//
-// select is Go's way of waiting on multiple channel operations simultaneously.
-// It blocks until one of the cases is ready, then runs that case.
-// This is fundamentally different from a switch — it's about concurrency,
-// not value matching.
+const debounce = 50 * time.Millisecond
+
+// loop runs until Stop. It waits for the saves to settle (an editor writes a file in several steps),
+// then handles every file that changed. The list of changed files and the timer belong to this
+// goroutine alone.
 func (w *Watcher) loop() {
-	// Debounce: editors often emit multiple rapid events for one save
-	// (e.g. vim writes temp file, renames, updates metadata = 3 events).
-	// We use a timer to wait 50ms after the last event before processing.
-	// This is the debounce pattern — common in UI and filesystem code.
-	//
-	// Why 50ms? Fast enough to feel instant (~1/20th of a second),
-	// slow enough to let the editor finish writing the file.
-	var debounce *time.Timer
-	pendingFiles := make(map[string]bool) // files waiting to be processed
+	pending := make(map[string]bool)
+	timer := time.NewTimer(debounce)
+	timer.Stop()
+	defer timer.Stop()
 
 	for {
 		select {
-
-		// ── Filesystem event ──
 		case event, ok := <-w.fsw.Events:
-			// The second return value `ok` from a channel receive is false
-			// when the channel is closed. If fsnotify closes its Events
-			// channel (e.g. after fsw.Close()), we exit the loop.
 			if !ok {
 				return
 			}
-
-			// We only care about Write and Create events.
-			// Rename and Remove are handled implicitly — if a file is
-			// removed, the next read will fail gracefully.
-			if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
-				// Only process TOML files
-				if filepath.Ext(event.Name) == ".toml" {
-					pendingFiles[event.Name] = true
-
-					// Reset the debounce timer.
-					// If a timer is already running, stop it and restart.
-					// This means "wait 50ms from the LAST event, not the first."
-					if debounce != nil {
-						debounce.Stop()
-					}
-					debounce = time.AfterFunc(50*time.Millisecond, func() {
-						// This function runs in its own goroutine after 50ms.
-						// We collect the pending files and process them.
-						//
-						// Copy the map to avoid a data race — the loop goroutine
-						// owns pendingFiles, but this func runs in a separate goroutine.
-						toProcess := make(map[string]bool)
-						for f := range pendingFiles {
-							toProcess[f] = true
-						}
-						// Clear pending
-						for f := range pendingFiles {
-							delete(pendingFiles, f)
-						}
-
-						for file := range toProcess {
-							w.handleChange(file)
-						}
-					})
-				}
+			if (event.Has(fsnotify.Write) || event.Has(fsnotify.Create)) && filepath.Ext(event.Name) == ".toml" {
+				pending[event.Name] = true
+				timer.Reset(debounce)
 			}
 
-		// ── fsnotify error ──
+		case <-timer.C:
+			files := make([]string, 0, len(pending))
+			for file := range pending {
+				files = append(files, file)
+			}
+			clear(pending)
+			w.handleChanges(files)
+
 		case err, ok := <-w.fsw.Errors:
 			if !ok {
 				return
 			}
 			log.Printf("[watcher] error: %v", err)
 
-		// ── Stop signal ──
 		case <-w.done:
-			// done channel was closed — exit the loop cleanly.
-			if debounce != nil {
-				debounce.Stop()
-			}
 			return
 		}
 	}
@@ -203,237 +164,201 @@ func (w *Watcher) loop() {
 //  Change handling
 // ─────────────────────────────────────────────
 
-// handleChange is called when a TOML file has changed.
-// It determines which file changed and delegates to the appropriate handler.
+// member is one track, bus or master file as it is on disk now.
+type member struct {
+	file   string
+	track  *project.Track
+	bus    *project.Bus
+	master *project.Master
+}
+
 func (w *Watcher) handleChange(file string) {
+	w.handleChanges([]string{file})
+}
+
+// handleChanges applies the files that changed, together with those rejected earlier. All at once if
+// that leaves the project valid; otherwise each on its own, and what is still invalid waits for the
+// change that completes it.
+func (w *Watcher) handleChanges(files []string) {
 	p := w.store.Get()
+	changed := make(map[string]bool, len(files))
+	for _, file := range files {
+		if file == filepath.Join(p.RootDir, "project.toml") {
+			clear(w.rejected)
+			w.handleProjectChange(file)
+			return
+		}
+		changed[file] = true
+	}
+	for file := range w.rejected {
+		files = append(files, file)
+	}
+	sort.Strings(files)
 
-	// Determine which file changed by comparing against known paths.
-	// We compare the absolute path of the changed file against the
-	// SourceFile fields we stored during loading.
-
-	if file == p.Master.SourceFile {
-		w.handleMasterChange(file, p)
+	var members []member
+	for i, file := range files {
+		if i > 0 && file == files[i-1] {
+			continue
+		}
+		if m, ok := readMember(p, file); ok {
+			members = append(members, m)
+		} else {
+			delete(w.rejected, file)
+		}
+	}
+	if len(members) == 0 {
 		return
 	}
 
-	for _, b := range p.Buses {
-		if file == b.SourceFile {
-			w.handleBusChange(file, b, p)
-			return
+	if next := merge(p, members); project.Validate(next) == nil {
+		for _, m := range members {
+			delete(w.rejected, m.file)
+		}
+		w.set(p, next, members)
+		return
+	}
+	for _, m := range members {
+		p := w.store.Get()
+		next := merge(p, []member{m})
+		if err := project.Validate(next); err != nil {
+			if changed[m.file] {
+				logRejected(m.file, err)
+			}
+			w.rejected[m.file] = true
+			continue
+		}
+		delete(w.rejected, m.file)
+		w.set(p, next, []member{m})
+	}
+}
+
+// set puts the new project in the store, unless the files were saved without a change.
+func (w *Watcher) set(old, next *project.Project, members []member) {
+	if reflect.DeepEqual(normalised(old), normalised(next)) {
+		return
+	}
+	w.store.Set(next)
+	for _, m := range members {
+		log.Printf("[watcher] applied %s", filepath.Base(m.file))
+	}
+}
+
+// readMember reads a file of the project from disk. False for a file that is not one of the
+// project's, or that does not parse: the engine keeps what it has.
+func readMember(p *project.Project, file string) (member, bool) {
+	m := member{file: file}
+	var into any
+	switch {
+	case p.Master != nil && file == p.Master.SourceFile:
+		m.master = &project.Master{SourceFile: file}
+		into = m.master
+	case findBus(p, file) != nil:
+		m.bus = &project.Bus{SourceFile: file}
+		into = m.bus
+	case findTrack(p, file) != nil:
+		m.track = &project.Track{SourceFile: file}
+		into = m.track
+	default:
+		return m, false
+	}
+	if _, err := toml.DecodeFile(file, into); err != nil {
+		log.Printf("[watcher] failed to parse %s: %v", file, err)
+		return m, false
+	}
+	return m, true
+}
+
+// merge is the project as it is with the given files read again. A clone: the store's project is
+// never changed.
+func merge(p *project.Project, members []member) *project.Project {
+	next := p.Clone()
+	for _, m := range members {
+		switch {
+		case m.master != nil:
+			master := *m.master
+			next.Master = &master
+		case m.bus != nil:
+			for i, b := range next.Buses {
+				if b.SourceFile == m.file {
+					bus := *m.bus
+					next.Buses[i] = &bus
+				}
+			}
+		case m.track != nil:
+			for i, t := range next.Tracks {
+				if t.SourceFile == m.file {
+					track := *m.track
+					next.Tracks[i] = &track
+				}
+			}
 		}
 	}
+	return next
+}
 
+// normalised is a project with empty lists as nil, so one read from a file and its clone in the
+// store compare equal when nothing changed.
+func normalised(p *project.Project) *project.Project {
+	c := p.Clone()
+	for _, t := range c.Tracks {
+		if len(t.FX) == 0 {
+			t.FX = nil
+		}
+		if len(t.Clips) == 0 {
+			t.Clips = nil
+		}
+		if len(t.Automation) == 0 {
+			t.Automation = nil
+		}
+		for i := range t.FX {
+			t.FX[i].Params = numbersAsFloats(t.FX[i].Params)
+		}
+	}
+	for _, b := range c.Buses {
+		if len(b.FX) == 0 {
+			b.FX = nil
+		}
+		for i := range b.FX {
+			b.FX[i].Params = numbersAsFloats(b.FX[i].Params)
+		}
+	}
+	if len(c.Master.FX) == 0 {
+		c.Master.FX = nil
+	}
+	for i := range c.Master.FX {
+		c.Master.FX[i].Params = numbersAsFloats(c.Master.FX[i].Params)
+	}
+	return c
+}
+
+// numbersAsFloats makes `wet = 1` and `wet = 1.0` the same value.
+func numbersAsFloats(params map[string]any) map[string]any {
+	out := make(map[string]any, len(params))
+	for key, value := range params {
+		if n, ok := schema.AsNumber(value); ok {
+			value = n
+		}
+		out[key] = value
+	}
+	return out
+}
+
+func findTrack(p *project.Project, file string) *project.Track {
 	for _, t := range p.Tracks {
-		if file == t.SourceFile {
-			w.handleTrackChange(file, t, p)
-			return
+		if t.SourceFile == file {
+			return t
 		}
 	}
-
-	// If the changed file is project.toml itself, do a full reload.
-	projectFile := filepath.Join(p.RootDir, "project.toml")
-	if file == projectFile {
-		w.handleProjectChange(file)
-	}
+	return nil
 }
 
-// handleTrackChange re-parses a track file and applies changes to the store.
-//
-// This is the core of the "reactive TOML" system.
-// The key insight: we compare old (in-memory) state with new (parsed) state
-// and only emit mutations for what actually changed.
-func (w *Watcher) handleTrackChange(file string, old *project.Track, p *project.Project) {
-	// Re-parse the changed file into a fresh Track struct.
-	var updated project.Track
-	if _, err := toml.DecodeFile(file, &updated); err != nil {
-		log.Printf("[watcher] failed to parse %s: %v", file, err)
-		return
-	}
-	updated.SourceFile = file
-
-	if err := validateWith(p, func(c *project.Project) {
-		for i, t := range c.Tracks {
-			if t.ID == old.ID {
-				track := updated
-				c.Tracks[i] = &track
-			}
-		}
-	}); err != nil {
-		logRejected(file, err)
-		return
-	}
-
-	log.Printf("[watcher] track changed: %s", old.ID)
-
-	// ── Diff: compare old vs new, apply targeted mutations ──
-	//
-	// Why diff instead of just replacing the whole track?
-	// Because targeted mutations emit specific events (EventTrackGainChanged)
-	// which the audio engine can apply with zero interruption to playback.
-	// A full replace emits EventStructureChanged which forces a graph rebuild —
-	// potentially causing a small audio glitch.
-	//
-	// So we try to be surgical first, and only fall back to full replace
-	// if something structural changed.
-
-	structural := false
-
-	// Check scalar params — these are hot-swappable
-	if old.Gain != updated.Gain {
-		w.store.Apply(state.SetTrackGain(old.ID, updated.Gain))
-		log.Printf("[watcher]   gain: %.1f → %.1f dB", old.Gain, updated.Gain)
-	}
-
-	if old.Pan != updated.Pan {
-		w.store.Apply(state.SetTrackPan(old.ID, updated.Pan))
-		log.Printf("[watcher]   pan: %.2f → %.2f", old.Pan, updated.Pan)
-	}
-
-	if old.Mute != updated.Mute {
-		w.store.Apply(state.SetTrackMute(old.ID, updated.Mute))
-		log.Printf("[watcher]   mute: %v → %v", old.Mute, updated.Mute)
-	}
-
-	if old.Solo != updated.Solo {
-		w.store.Apply(state.SetTrackSolo(old.ID, updated.Solo))
-		log.Printf("[watcher]   solo: %v → %v", old.Solo, updated.Solo)
-	}
-
-	// Diff FX params — only if chain length is the same (no structural change)
-	if len(old.FX) == len(updated.FX) {
-		for i := range old.FX {
-			// Only diff if same FX type — different type = structural change
-			if old.FX[i].Type != updated.FX[i].Type {
-				structural = true
-				break
-			}
-			diffFXParams(w.store, old.ID, i, old.FX[i], updated.FX[i])
-		}
-	} else {
-		// FX chain length changed — structural
-		structural = true
-	}
-
-	// Diff clips — if count or files changed, that's structural
-	if len(old.Clips) != len(updated.Clips) {
-		structural = true
-	} else {
-		for i := range old.Clips {
-			if old.Clips[i].File != updated.Clips[i].File {
-				structural = true
-				break
-			}
-			// Clip timing and in-point changes are also structural — they
-			// affect where/when the clip plays and where it reads from.
-			if old.Clips[i].Start != updated.Clips[i].Start ||
-				old.Clips[i].End != updated.Clips[i].End ||
-				old.Clips[i].Offset != updated.Clips[i].Offset {
-				structural = true
-				break
-			}
-			// Clip gain is hot-swappable — a targeted mutation lets the
-			// engine turn the clip's volume knob without any rebuild.
-			if old.Clips[i].Gain != updated.Clips[i].Gain {
-				w.store.Apply(state.SetClipGain(old.ID, i, updated.Clips[i].Gain))
-				log.Printf("[watcher]   clip[%d].gain: %.1f → %.1f dB", i, old.Clips[i].Gain, updated.Clips[i].Gain)
-			}
+func findBus(p *project.Project, file string) *project.Bus {
+	for _, b := range p.Buses {
+		if b.SourceFile == file {
+			return b
 		}
 	}
-
-	if structural {
-		log.Printf("[watcher]   structural change detected — replacing track")
-		w.store.Apply(state.ReplaceTrack(&updated))
-	}
-}
-
-// handleBusChange diffs and applies bus file changes.
-func (w *Watcher) handleBusChange(file string, old *project.Bus, p *project.Project) {
-	var updated project.Bus
-	if _, err := toml.DecodeFile(file, &updated); err != nil {
-		log.Printf("[watcher] failed to parse %s: %v", file, err)
-		return
-	}
-	updated.SourceFile = file
-
-	if err := validateWith(p, func(c *project.Project) {
-		for i, b := range c.Buses {
-			if b.ID == old.ID {
-				bus := updated
-				c.Buses[i] = &bus
-			}
-		}
-	}); err != nil {
-		logRejected(file, err)
-		return
-	}
-
-	log.Printf("[watcher] bus changed: %s", old.ID)
-
-	if old.Gain != updated.Gain {
-		w.store.Apply(state.SetBusGain(old.ID, updated.Gain))
-		log.Printf("[watcher]   gain: %.1f → %.1f dB", old.Gain, updated.Gain)
-	}
-
-	structural := false
-	if len(old.FX) == len(updated.FX) {
-		for i := range old.FX {
-			if old.FX[i].Type != updated.FX[i].Type {
-				structural = true
-				break
-			}
-			diffFXParams(w.store, old.ID, i, old.FX[i], updated.FX[i])
-		}
-	} else {
-		structural = true
-	}
-
-	if structural {
-		w.store.Apply(state.ReplaceBus(&updated))
-	}
-}
-
-// handleMasterChange diffs and applies master file changes.
-func (w *Watcher) handleMasterChange(file string, p *project.Project) {
-	var updated project.Master
-	if _, err := toml.DecodeFile(file, &updated); err != nil {
-		log.Printf("[watcher] failed to parse %s: %v", file, err)
-		return
-	}
-	updated.SourceFile = file
-
-	if err := validateWith(p, func(c *project.Project) {
-		master := updated
-		c.Master = &master
-	}); err != nil {
-		logRejected(file, err)
-		return
-	}
-
-	old := p.Master
-	log.Printf("[watcher] master changed")
-
-	if old.Gain != updated.Gain {
-		w.store.Apply(state.SetMasterGain(updated.Gain))
-		log.Printf("[watcher]   gain: %.1f → %.1f dB", old.Gain, updated.Gain)
-	}
-
-	structural := false
-	if len(old.FX) == len(updated.FX) {
-		for i := range old.FX {
-			if old.FX[i].Type != updated.FX[i].Type {
-				structural = true
-				break
-			}
-			diffFXParams(w.store, "master", i, old.FX[i], updated.FX[i])
-		}
-	} else {
-		structural = true
-	}
-
-	if structural {
-		w.store.Apply(state.ReplaceMaster(&updated))
-	}
+	return nil
 }
 
 // handleProjectChange does a full reload when project.toml itself changes.
@@ -446,83 +371,13 @@ func (w *Watcher) handleProjectChange(file string) {
 		log.Printf("[watcher] reload failed: %v", err)
 		return
 	}
-
 	if err := project.Validate(p); err != nil {
 		log.Printf("[watcher] reload aborted — validation failed:\n%v", err)
 		return
 	}
 
-	w.store.Reload(p)
+	w.store.Set(p)
 	log.Printf("[watcher] project reloaded successfully")
-}
-
-// ─────────────────────────────────────────────
-//  FX diffing helper
-// ─────────────────────────────────────────────
-
-// diffFXParams compares two FX units with the same type and applies
-// SetFXParam mutations for any parameters that changed.
-//
-// FX params are stored as map[string]any — we iterate the new params
-// and compare each one to the old value.
-func diffFXParams(store *state.Store, ownerID string, fxIndex int, old, updated project.FX) {
-	for key, newVal := range updated.Params {
-		// Type-assert the new value to float64.
-		// TOML numbers without a decimal are decoded as int64 by BurntSushi/toml,
-		// and numbers with a decimal are float64. We normalize to float64.
-		newF, ok := toFloat64(newVal)
-		if !ok {
-			continue // skip non-numeric params (e.g. string params)
-		}
-
-		oldVal, exists := old.Params[key]
-		if !exists {
-			// New param that didn't exist before — apply it
-			store.Apply(state.SetFXParam(ownerID, fxIndex, key, newF))
-			continue
-		}
-
-		oldF, ok := toFloat64(oldVal)
-		if !ok {
-			continue
-		}
-
-		if oldF != newF {
-			store.Apply(state.SetFXParam(ownerID, fxIndex, key, newF))
-			log.Printf("[watcher]   fx[%d].%s: %.3f → %.3f", fxIndex, key, oldF, newF)
-		}
-	}
-}
-
-// toFloat64 converts any numeric type to float64.
-// TOML decodes integers as int64 and floats as float64 — we normalize here
-// so callers don't need to handle both cases.
-func toFloat64(v any) (float64, bool) {
-	switch val := v.(type) {
-	case float64:
-		return val, true
-	case int64:
-		return float64(val), true
-	case int:
-		return float64(val), true
-	case float32:
-		return float64(val), true
-	}
-	return 0, false
-}
-
-// validateWith checks a change to one file before it reaches the engine: the project as it would be with
-// the change, validated whole. Whole, because a file can be valid on its own and still break the project,
-// a track sending to a bus that does not exist.
-//
-// A file that does not parse never gets here (the caller logs it and stops). This is for the files that
-// parse but say something the engine must not play, like `gain = 50`: typed by hand, or saved half-typed
-// by an editor's auto-save. Rejected, the engine keeps playing the last valid version, and the next save
-// that fixes the file is applied as usual.
-func validateWith(p *project.Project, change func(candidate *project.Project)) error {
-	candidate := p.Clone()
-	change(candidate)
-	return project.Validate(candidate)
 }
 
 func logRejected(file string, err error) {

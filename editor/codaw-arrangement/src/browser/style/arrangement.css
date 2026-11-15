@@ -443,3 +443,19 @@
 .codaw-arr-track-header.codaw-arr-track-selected {
     background: color-mix(in srgb, var(--codaw-track-color) 14%, var(--codaw-arr-header-background));
 }
+
+/* Where a sample dragged from the Library would land. */
+.codaw-arr-drop-ghost {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    box-sizing: border-box;
+    padding: 2px 6px;
+    border: 1px dashed var(--codaw-track-color, var(--theia-focusBorder));
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--codaw-track-color, var(--theia-focusBorder)) 25%, transparent);
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    pointer-events: none;
+}

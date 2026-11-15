@@ -19,7 +19,7 @@ CodaW is a DAW where the session is code you can version, diff, and hand-edit. N
 
 | Path | What |
 |------|------|
-| [`codaw/`](codaw/) | The audio engine — a Go + miniaudio (cgo) CLI. Loads/validates a project, plays it, hot-reloads on edit, and renders to WAV. |
+| [`codaw/`](codaw/) | The audio engine — a Go CLI with its own mixer and effects (malgo, via cgo, for the audio device). Loads/validates a project, plays it, hot-reloads on edit, and renders to WAV. |
 | [`vscode-extension/`](vscode-extension/) | The editor UI, published on Open VSX as `kevingruber.codaw`. |
 | [`editor/`](editor/) | The standalone CodaW application — a desktop and browser editor built on [Eclipse Theia](https://theia-ide.org). Early: branding and shell so far. |
 
@@ -29,8 +29,8 @@ Grab a prebuilt binary for your OS from the
 [latest release](https://github.com/KevinGruber2001/codaw/releases) — no
 toolchain needed.
 
-Building from source requires Go plus a C compiler (the engine embeds
-[miniaudio](https://miniaud.io) via cgo). Note that `go install .../codaw@latest`
+Building from source requires Go plus a C compiler (the engine reaches the audio
+device through [malgo](https://github.com/gen2brain/malgo), a cgo binding). Note that `go install .../codaw@latest`
 is deliberately unsupported: the Go module lives in the `codaw/` subdirectory of
 this monorepo, and cgo would require every user to carry a C toolchain anyway —
 prebuilt release binaries are the supported channel.
@@ -53,10 +53,10 @@ param, an automation point) and hear the change instantly.
 - Multi-file TOML projects: tracks, buses, master, clips, FX, automation
 - Playback with a beat-accurate timeline, per-track gain/pan/mute/solo, bus routing
 - Live hot-reload (edit a file → audible change, no restart)
-- Effects: 3-band EQ, reverb (echo-style)
+- Effects, all in Go: 3-band EQ, compressor, reverb (Freeverb), master limiter
 - Non-destructive clip trim/split (source in-points)
 - Parameter automation over time (gain fades, filter sweeps)
-- Offline render to 16-bit WAV
+- Offline render to 16-bit WAV, through the same mixer as playback
 
 ## License
 

@@ -169,9 +169,10 @@ func TestDiagnostics(t *testing.T) {
 		want []string
 	}{
 		{"clean", trackText, nil},
-		{"out of range, on the value", replace("gain = -3.0", "gain = -70.0"), []string{"3:7-12 error: gain must be between"}},
+		{"out of range, on the value", replace("gain = -3.0", "gain = -70.0"), []string{"3:7-12 error: must be between -60 and 6 dB"}},
 		{"wrong type", replace("gain = -3.0", `gain = "loud"`), []string{"3:7-13 error: gain must be a number, not a string"}},
 		{"unknown key", replace("gain = -3.0", "gian = -3.0"), []string{`3:0-4 warning: unknown key "gian": the engine ignores it (did you mean "gain"?)`}},
+		{"effect parameter out of range", replace("wet  = 0.3", "wet  = 1.3"), []string{"11:7-10 error: must be between 0 and 1, got 1.3"}},
 		{"unknown effect", replace(`"reverb"`, `"revrb"`), []string{`10:7-14 warning: unknown effect "revrb": the engine skips it (did you mean "reverb"?)`}},
 		{"parameter of another effect", replace("low_db = 3.0", "wet = 1"), []string{`7:0-3 warning: eq_3band has no parameter "wet"`}},
 		{"missing key, on the header", replace("file  = \"samples/kick_01.wav\"\n", ""), []string{"13:0-8 error: file: required"}},
@@ -186,7 +187,7 @@ func TestDiagnostics(t *testing.T) {
 		{"target: twice", trackText + "\n[[automation]]\ntarget = \"gain\"\n[[automation.point]]\nbeat = 1\nvalue = 0\n", []string{`30:9-15 warning: "gain" is already automated by the lane on line 18`}},
 		{"nested field", replace("beat  = 16", "beat  = -1"), []string{"26:8-10 error: must be >= 0"}},
 		{"columns count UTF-16 units", replace(`bus  = "drums"`, `bus  = "drms" # 🎛`) + "", []string{"2:7-13 error"}},
-		{"windows line endings", strings.ReplaceAll(replace("gain = -3.0", "gain = -70.0"), "\n", "\r\n"), []string{"3:7-12 error: gain must be between"}},
+		{"windows line endings", strings.ReplaceAll(replace("gain = -3.0", "gain = -70.0"), "\n", "\r\n"), []string{"3:7-12 error: must be between -60 and 6 dB"}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			x := newSession(t)
@@ -206,7 +207,7 @@ func TestProjectDiagnostics(t *testing.T) {
 	x.edit("tracks/kick.toml", strings.Replace(trackText, "-3.0", "-70.0", 1))
 	x.edit("project.toml", strings.Replace(projectText, "120.0", "12x", 1))
 	x.expect("project.toml", "5:16-17 error")
-	x.expect("tracks/kick.toml", "gain must be between")
+	x.expect("tracks/kick.toml", "must be between -60 and 6 dB")
 
 	// A bus that does not parse is not a bus that does not exist.
 	x.edit("project.toml", projectText)
@@ -222,7 +223,7 @@ func TestProjectDiagnostics(t *testing.T) {
 	// A file in tracks/ that [layout] does not list is checked, and said to be unused.
 	x.save("tracks/new.toml", "")
 	x.edit("tracks/new.toml", "id = \"new\"\ngain = 99\n")
-	x.expect("tracks/new.toml", "1:0-10 warning: tracks/new.toml is not listed", "2:7-9 error: gain must be between")
+	x.expect("tracks/new.toml", "1:0-10 warning: tracks/new.toml is not listed", "2:7-9 error: must be between -60 and 6 dB")
 }
 
 func (x *session) complete(name, text string) []completionItem {

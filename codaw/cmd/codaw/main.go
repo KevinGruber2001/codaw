@@ -51,6 +51,7 @@ func init() {
 	rootCmd.AddCommand(renderCmd)
 	rootCmd.AddCommand(serveCmd)
 	rootCmd.AddCommand(lspCmd)
+	rootCmd.AddCommand(schemaCmd)
 }
 
 // ─────────────────────────────────────────────
