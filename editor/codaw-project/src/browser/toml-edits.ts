@@ -87,6 +87,70 @@ export function sectionLines(text: string, target: TomlTarget): { first: number;
     return { first, last: Math.max(first, last) };
 }
 
+/**
+ * The edit that adds a table to an array of tables: `[[section]]` with the given keys, after the last
+ * one there is (after the end of the file if there is none), separated by a blank line. The keys are
+ * written in the given order, with their "=" lined up.
+ */
+export function insertTableEdit(text: string, section: string, values: [string, number | boolean | string][]): TomlEdit {
+    const lines = splitLines(text);
+    const width = Math.max(...values.map(([key]) => key.length));
+    const block = [`[[${section}]]`, ...values.map(([key, value]) => `${key.padEnd(width)} = ${formatTomlValue(value)}`)].join('\n');
+
+    // After the last line with content of the last such table; at the end of the file without one.
+    const headers = lines.map((line, i) => ({ i, header: parseHeader(line.text) }))
+        .filter(h => h.header?.name === section && h.header.array);
+    let after = contentEnd(lines, 0, lines.length);
+    if (headers.length > 0) {
+        const bounds = sectionBounds(lines, { section, index: headers.length - 1 })!;
+        after = contentEnd(lines, bounds.headerLine!, bounds.to);
+    }
+    const end = lines[after].start + lines[after].text.length;
+    return { start: end, end, text: `\n\n${block}` };
+}
+
+/**
+ * The edit that removes the `index`-th `[[section]]` with everything in it, up to the next table. Its
+ * blank lines go with it, so the file does not collect gaps. `undefined` if there is no such table.
+ */
+export function removeTableEdit(text: string, section: string, index: number): TomlEdit | undefined {
+    const lines = splitLines(text);
+    const bounds = sectionBounds(lines, { section, index });
+    if (!bounds || bounds.headerLine === undefined) {
+        return undefined;
+    }
+    const first = bounds.headerLine;
+    const last = contentEnd(lines, first, bounds.to);
+    // Its own blank lines after it go too; comments after them stay, as they belong to what follows.
+    let next = last + 1;
+    while (next < lines.length && lines[next].text.trim() === '') {
+        next++;
+    }
+    if (next >= lines.length) {
+        // The last thing in the file: take the blank lines before it instead, so the file ends where the
+        // table before it did.
+        let before = first;
+        while (before > 0 && lines[before - 1].text.trim() === '') {
+            before--;
+        }
+        const start = before > 0 ? lines[before - 1].start + lines[before - 1].text.length : 0;
+        return { start, end: text.length, text: before > 0 ? '\n' : '' };
+    }
+    return { start: lines[first].start, end: lines[next].start, text: '' };
+}
+
+/**
+ * The last line of a table that is its own: not blank, and not a comment. Comments right above the next
+ * header belong to that header ("# Automation: ..." above [[automation]]).
+ */
+function contentEnd(lines: Line[], from: number, to: number): number {
+    let last = to - 1;
+    while (last > from && (lines[last].text.trim() === '' || lines[last].text.trim().startsWith('#'))) {
+        last--;
+    }
+    return Math.max(from, last);
+}
+
 /** Applies edits computed against the same text. They must not overlap. */
 export function applyEdits(text: string, edits: TomlEdit[]): string {
     return [...edits]

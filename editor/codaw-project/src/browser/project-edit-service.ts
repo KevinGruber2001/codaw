@@ -9,7 +9,17 @@ import { MessageService } from '@theia/core/lib/common/message-service';
 import URI from '@theia/core/lib/common/uri';
 import * as monaco from '@theia/monaco-editor-core';
 import { MonacoTextModelService } from '@theia/monaco/lib/browser/monaco-text-model-service';
-import { TomlEdit, TomlTarget, valueEdit } from './toml-edits.js';
+import { TomlEdit, TomlTarget, insertTableEdit, removeTableEdit, valueEdit } from './toml-edits.js';
+
+/** A clip to add, with every key its [[clip]] gets. */
+export interface NewClip {
+    file: string;
+    start: number;
+    end: number;
+    loop: boolean;
+    gain: number;
+    offset: number;
+}
 
 interface ValueChange {
     target: TomlTarget;
@@ -64,6 +74,26 @@ export class ProjectEditService {
         return this.edit(trackUri, [{ target: {}, key: 'pan', value: Math.round(pan * 100) / 100 }]);
     }
 
+    /** Adds a clip to a track: a new [[clip]], after the track's last one. */
+    addClip(trackUri: string, clip: NewClip): Promise<boolean> {
+        return this.applyEdits(trackUri, text => [insertTableEdit(text, 'clip', [
+            ['file', clip.file],
+            ['start', clip.start],
+            ['end', clip.end],
+            ['loop', clip.loop],
+            ['gain', clip.gain],
+            ['offset', clip.offset]
+        ])]);
+    }
+
+    /** Removes a track's index-th clip, its [[clip]] table and everything in it. */
+    removeClip(trackUri: string, index: number): Promise<boolean> {
+        return this.applyEdits(trackUri, text => {
+            const edit = removeTableEdit(text, 'clip', index);
+            return edit ? [edit] : `it has no [[clip]] #${index + 1} anymore`;
+        });
+    }
+
     setMute(trackUri: string, mute: boolean): Promise<boolean> {
         return this.edit(trackUri, [{ target: {}, key: 'mute', value: mute }]);
     }
@@ -76,7 +106,26 @@ export class ProjectEditService {
      * Applies several value changes to one file as one edit: one step to undo, and one save, so the engine
      * never loads a half-done change (a clip with its new start and its old end).
      */
-    protected async edit(uri: string, changes: ValueChange[]): Promise<boolean> {
+    protected edit(uri: string, changes: ValueChange[]): Promise<boolean> {
+        return this.applyEdits(uri, text => {
+            const edits: TomlEdit[] = [];
+            for (const change of changes) {
+                const edit = valueEdit(text, change.target, change.key, change.value);
+                if (!edit) {
+                    // The file no longer has what the view showed, e.g. the clip was deleted in the editor.
+                    return `it has no ${describe(change.target)} anymore`;
+                }
+                edits.push(edit);
+            }
+            return edits;
+        });
+    }
+
+    /**
+     * Applies edits computed from a file's current text, as one change: one step to undo, one save. The
+     * edits, or why the file cannot be changed as asked, come from `compute`.
+     */
+    protected async applyEdits(uri: string, compute: (text: string) => TomlEdit[] | string): Promise<boolean> {
         const reference = await this.textModels.createModelReference(new URI(uri));
         try {
             const model = reference.object;
@@ -84,16 +133,10 @@ export class ProjectEditService {
                 this.messages.warn(`${new URI(uri).path.base} is read-only.`);
                 return false;
             }
-            const text = model.textEditorModel.getValue();
-            const edits: TomlEdit[] = [];
-            for (const change of changes) {
-                const edit = valueEdit(text, change.target, change.key, change.value);
-                if (!edit) {
-                    // The file no longer has what the view showed, e.g. the clip was deleted in the editor.
-                    this.messages.warn(`Could not change ${new URI(uri).path.base}: it has no ${describe(change.target)} anymore.`);
-                    return false;
-                }
-                edits.push(edit);
+            const edits = compute(model.textEditorModel.getValue());
+            if (typeof edits === 'string') {
+                this.messages.warn(`Could not change ${new URI(uri).path.base}: ${edits}.`);
+                return false;
             }
 
             const wasDirty = model.dirty;
