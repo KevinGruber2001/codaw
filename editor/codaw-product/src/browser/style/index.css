@@ -1,0 +1,230 @@
+/********************************************************************************
+ * Copyright (C) 2026 Kevin Gruber.
+ *
+ * SPDX-License-Identifier: MIT
+ ********************************************************************************/
+
+:root {
+    --codaw-branding-icon: url(../icons/codaw.svg);
+    /* The accent bar of the application icon, so the wordmark matches the icon. */
+    --codaw-branding-accent: #ff6a5a;
+}
+
+/*
+ * The application icon. `.theia-icon` is what core uses for the logo in the browser menu bar, so setting
+ * it here brands that too.
+ */
+.theia-icon {
+    background-image: var(--codaw-branding-icon);
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: contain;
+}
+
+/*
+ * The application icon on the welcome tab, so the tab is recognizable the way a favicon makes a page.
+ * Tab icons in the main area are drawn as a mask tinted with `--theia-icon-foreground`, which would
+ * flatten the brand color, so the icon is put back as a plain background image. Core does the same for
+ * file icons, hence the selectors have to be as specific as the rules in its `tabs.css`.
+ */
+.lm-TabBar.theia-app-centers .lm-TabBar-tabIcon.codaw-welcome-tab-icon,
+.lm-TabBar-tab.lm-mod-drag-image .lm-TabBar-tabIcon.codaw-welcome-tab-icon {
+    /*
+     * `content-box` keeps the icon out of the `padding-right` that core gives every tab icon as the gap
+     * before the label. Without it the background fills the padding box and eats into that gap.
+     */
+    background: var(--codaw-branding-icon) center/contain no-repeat content-box;
+    -webkit-mask: none;
+    mask: none;
+    min-height: var(--theia-icon-size);
+}
+
+.codaw-branding-accent {
+    color: var(--codaw-branding-accent);
+    font-weight: 600;
+}
+
+.codaw-text-bold {
+    font-weight: 600;
+}
+
+/*
+ * Shared by the welcome page and the About dialog, which describe the product in the same words.
+ */
+
+.codaw-section > div {
+    margin-bottom: calc(var(--theia-ui-padding) * 1.5);
+}
+
+.codaw-section-header {
+    display: flex;
+    align-items: center;
+    gap: var(--theia-ui-padding);
+    margin: 0 0 calc(var(--theia-ui-padding) * 1.5) 0;
+    font-size: calc(var(--theia-content-font-size) * 1.15);
+    font-weight: 600;
+}
+
+.codaw-subtitle {
+    margin: calc(var(--theia-ui-padding) / 2) 0 0 0;
+    color: var(--theia-descriptionForeground);
+}
+
+.codaw-rule {
+    border: none;
+    border-top: 1px solid var(--theia-editorWidget-border);
+    margin: calc(var(--theia-ui-padding) * 3) 0;
+}
+
+.codaw-empty {
+    color: var(--theia-descriptionForeground);
+}
+
+/* A command link is a button, so it gets the pointer and the link color without an `href`. */
+.codaw-action a,
+.codaw-section a {
+    color: var(--theia-textLink-foreground);
+    cursor: pointer;
+    outline-offset: 2px;
+}
+
+.codaw-action a:hover,
+.codaw-section a:hover {
+    color: var(--theia-textLink-activeForeground);
+    text-decoration: underline;
+}
+
+.codaw-action {
+    display: flex;
+    align-items: baseline;
+    gap: var(--theia-ui-padding);
+    /* The workspace name must be able to shrink before the path beside it wraps. */
+    min-width: 0;
+    line-height: 1.6;
+}
+
+.codaw-path {
+    color: var(--theia-descriptionForeground);
+    font-size: calc(var(--theia-content-font-size) * 0.9);
+    /* A long path ellipsizes rather than widening the column. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+/*
+ * The welcome page.
+ */
+
+.codaw-welcome-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: auto;
+    /* The page scrolls vertically; anything wider than the widget would be clipped, not reachable. */
+    overflow-x: hidden;
+    font-size: var(--theia-content-font-size);
+}
+
+.codaw-welcome-content {
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: calc(var(--theia-ui-padding) * 5);
+    box-sizing: border-box;
+}
+
+.codaw-welcome-header {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: calc(var(--theia-ui-padding) * 3);
+}
+
+.codaw-welcome-header h1 {
+    margin: 0;
+}
+
+/* `.theia-icon` in core is sized for the logo in the browser menu bar, so the header gives it a box. */
+.codaw-welcome-header .codaw-welcome-icon {
+    flex: 0 0 auto;
+    width: 64px;
+    height: 64px;
+    margin: 0;
+}
+
+/*
+ * Two columns: what you can do on the left, what CodaW is on the right. `auto-fit` folds them into one
+ * column on a narrow editor without needing a media query, and `min()` keeps the track from staying at
+ * 320px once the widget is narrower than that.
+ */
+.codaw-welcome-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+    gap: calc(var(--theia-ui-padding) * 4) calc(var(--theia-ui-padding) * 6);
+    align-items: start;
+}
+
+.codaw-welcome-column {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--theia-ui-padding) * 4);
+    /* Keeps the recent workspace paths ellipsizing instead of widening the column. */
+    min-width: 0;
+}
+
+.codaw-welcome-footer {
+    flex: 0 0 auto;
+    padding: calc(var(--theia-ui-padding) * 2);
+    text-align: center;
+    border-top: 1px solid var(--theia-editorWidget-border);
+}
+
+.codaw-welcome-footer label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--theia-ui-padding);
+    cursor: pointer;
+}
+
+/*
+ * The About dialog.
+ */
+
+.codaw-about-header h1 {
+    margin: 0;
+}
+
+.ad-logo {
+    background-image: var(--codaw-branding-icon);
+    background-position: center center;
+    background-repeat: no-repeat;
+    background-size: contain;
+    width: 118px;
+    height: 118px;
+    padding: 20px;
+}
+
+.ad-float {
+    float: right;
+}
+
+/*
+ * The Theia IDE dialog is a fixed 1150px wide, which overflows a smaller window. The dialog is sized to
+ * the window instead, with a measure wide enough to keep the extension list beside the description.
+ */
+.ad-container {
+    padding: 20px;
+    width: min(1000px, 75vw);
+}
+
+ul.theia-aboutExtensions {
+    height: 450px;
+    overflow: hidden;
+    overflow-y: scroll;
+    list-style-type: none;
+    padding: 0;
+    margin-left: 10px;
+}

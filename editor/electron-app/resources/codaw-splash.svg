@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="446" height="276" viewBox="0 0 446 276" role="img" aria-label="CodaW">
+  <rect width="446" height="276" rx="16" fill="#17181C"/>
+  <g transform="translate(223,118) scale(1.35)" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M -30 -34 H -42 V 34 H -30" fill="none" stroke="#F5F5F6" stroke-width="10"/>
+    <path d="M 30 -34 H 42 V 34 H 30" fill="none" stroke="#F5F5F6" stroke-width="10"/>
+    <rect x="-22" y="-14" width="11" height="28" rx="5" fill="#F5F5F6"/>
+    <rect x="-6" y="-24" width="11" height="48" rx="5" fill="#FF6A5A"/>
+    <rect x="10" y="-18" width="11" height="36" rx="5" fill="#F5F5F6"/>
+  </g>
+  <text x="223" y="205" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+        font-size="34" font-weight="600" fill="#F5F5F6">Coda<tspan fill="#FF6A5A">W</tspan></text>
+  <text x="223" y="235" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+        font-size="13" fill="#8A8C94">A code-first digital audio workstation</text>
+</svg>

@@ -1,0 +1,46 @@
+{
+  "private": true,
+  "name": "codaw-inspector",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The inspector: properties of the selected track, clip or bus.",
+  "license": "MIT",
+  "keywords": [
+    "theia-extension"
+  ],
+  "files": [
+    "lib",
+    "src"
+  ],
+  "dependencies": {
+    "@theia/core": "1.77.0",
+    "@theia/property-view": "1.77.0",
+    "codaw-project": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "rimraf": "^5.0.0",
+    "typescript": "~5.9.3"
+  },
+  "scripts": {
+    "compile": "npm run clean && npm run build",
+    "clean": "rimraf lib",
+    "build": "tsc",
+    "watch": "tsc -w"
+  },
+  "theiaExtensions": [
+    {
+      "frontend": "lib/browser/inspector-frontend-module"
+    }
+  ],
+  "peerDependencies": {
+    "react": "^19.2.0"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    "./lib/*.json": "./lib/*.json",
+    "./lib/*.js": "./lib/*.js",
+    "./lib/*": "./lib/*.js",
+    "./*": "./*"
+  }
+}

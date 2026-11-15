@@ -1,0 +1,62 @@
+appId: dev.codaw.CodaW
+productName: CodaW
+copyright: Copyright © 2026 Kevin Gruber
+electronDist: ../node_modules/electron/dist
+electronVersion: 44.9.1
+asar: true
+asarUnpack:
+  - "**/lib/backend/native/**"
+  - "**/lib/backend/shell-integrations/**"
+  - "**/lib/prebuilds/**"
+nodeGypRebuild: false
+npmRebuild: false
+
+directories:
+  buildResources: resources
+
+# node_modules and package.json are copied automatically. node_modules is excluded
+# explicitly because electron-builder brings its own Electron and the backend is bundled.
+files:
+  - src-gen
+  - lib
+  - resources/icons/WindowIcon/512-512.png
+  - resources/codaw-splash.svg
+  - "!**node_modules/**"
+
+win:
+  icon: resources/icon.ico
+  target:
+    - nsis
+mac:
+  icon: resources/icon.icns
+  category: public.app-category.music
+  darkModeSupport: true
+  target:
+    - dmg
+    - zip
+linux:
+  icon: resources/icons/LinuxLauncherIcons
+  category: AudioVideo;Audio;Development
+  vendor: Kevin Gruber
+  mimeTypes:
+    - inode/directory
+  target:
+    - deb
+    - AppImage
+
+nsis:
+  menuCategory: true
+  oneClick: false
+  perMachine: false
+  installerHeaderIcon: resources/icon.ico
+  installerIcon: resources/icon.ico
+  uninstallerIcon: resources/icon.ico
+  allowToChangeInstallationDirectory: true
+  runAfterFinish: false
+  artifactName: ${productName}Setup.${ext}
+dmg:
+  artifactName: ${productName}.${ext}
+deb:
+  artifactName: ${productName}.${ext}
+appImage:
+  artifactName: ${productName}.${ext}

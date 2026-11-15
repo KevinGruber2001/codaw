@@ -1,0 +1,195 @@
+/********************************************************************************
+ * Copyright (C) 2026 Kevin Gruber.
+ *
+ * SPDX-License-Identifier: MIT
+ ********************************************************************************/
+
+/*
+ * The transport bar, the row between the menu bar and the work area. Flat and dark, after openDAW: the
+ * project on the left, the transport buttons, a large readout of position, tempo and meter, the master
+ * level on the right.
+ */
+.codaw-transport {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--theia-ui-padding) * 4);
+    min-height: 44px;
+    padding: 0 calc(var(--theia-ui-padding) * 3);
+    box-sizing: border-box;
+    background: var(--theia-titleBar-activeBackground);
+    border-bottom: 1px solid var(--theia-panel-border);
+    user-select: none;
+    /* The bar stays one row: below its width it is clipped rather than wrapped into a second row. */
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.codaw-tp-project {
+    min-width: 96px;
+    max-width: 180px;
+    padding: 4px 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border: none;
+    border-radius: 4px;
+    background: none;
+    color: var(--theia-foreground);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.codaw-tp-project:hover:not(:disabled) {
+    background: var(--theia-toolbar-hoverBackground);
+}
+
+.codaw-tp-project:disabled {
+    color: var(--theia-descriptionForeground);
+    cursor: default;
+}
+
+.codaw-tp-icon {
+    display: block;
+}
+
+/*
+ * The transport's buttons as one segmented control, after Logic: a recessed group with thin dividers.
+ * The modes (cycle, metronome) are a second, smaller group to the right of the display.
+ */
+.codaw-tp-segment,
+.codaw-tp-modes {
+    display: flex;
+    padding: 2px;
+    border-radius: 7px;
+    /* A raised panel a few shades lighter than the bar, as Logic's buttons sit on: not a dark hole in it. */
+    background: color-mix(in srgb, var(--theia-foreground) 11%, var(--theia-titleBar-activeBackground));
+    border: 1px solid color-mix(in srgb, var(--theia-foreground) 14%, transparent);
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
+}
+
+.codaw-transport-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 26px;
+    padding: 0;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    color: color-mix(in srgb, var(--theia-foreground) 90%, transparent);
+    cursor: pointer;
+}
+
+.codaw-transport-button:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--theia-foreground) 12%, transparent);
+    color: var(--theia-foreground);
+}
+
+.codaw-transport-button:active:not(:disabled) {
+    background: color-mix(in srgb, var(--theia-foreground) 20%, transparent);
+}
+
+.codaw-transport-button:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.codaw-transport-button:focus-visible {
+    outline: 1px solid var(--theia-focusBorder);
+    outline-offset: -1px;
+}
+
+/* Play is green and lit while playing; record red; cycle yellow when on: the colors every DAW uses. */
+.codaw-tp-play.codaw-transport-button-on {
+    color: #3ddc6e;
+    background: color-mix(in srgb, #3ddc6e 16%, transparent);
+}
+
+.codaw-tp-record {
+    color: #ff4d4d;
+}
+
+.codaw-tp-record:disabled {
+    opacity: 0.45;
+}
+
+.codaw-tp-cycle.codaw-transport-button-on {
+    color: #1d1d1d;
+    background: #f2c230;
+}
+
+.codaw-tp-cycle.codaw-transport-button-on:hover {
+    background: #f6cf55;
+    color: #1d1d1d;
+}
+
+/* The readout: large figures, each with a small label underneath. Tabular figures, so they do not jitter. */
+.codaw-tp-readout {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--theia-ui-padding) * 5);
+}
+
+.codaw-tp-field {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 28px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--theia-foreground);
+    font: inherit;
+    line-height: 1;
+}
+
+.codaw-tp-field-link {
+    cursor: pointer;
+}
+
+.codaw-tp-field-link:hover .codaw-tp-value {
+    color: var(--codaw-branding-accent, var(--theia-focusBorder));
+}
+
+.codaw-tp-value {
+    font-size: 20px;
+    font-weight: 300;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+}
+
+.codaw-tp-label {
+    margin-top: 3px;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--theia-textLink-foreground);
+    opacity: 0.8;
+}
+
+.codaw-tp-spacer {
+    flex: 1 1 auto;
+}
+
+/* The master level: two thin bars, left and right channel. */
+.codaw-tp-master {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 72px;
+}
+
+.codaw-tp-master-bar {
+    height: 3px;
+    border-radius: 1px;
+    background: color-mix(in srgb, var(--theia-foreground) 12%, transparent);
+    overflow: hidden;
+}
+
+.codaw-tp-master-level {
+    height: 100%;
+    background: linear-gradient(to right, #6fd3a0 0 70%, #e9d36b 70% 90%, #ff6a5a 90%);
+    background-size: 72px 100%;
+}

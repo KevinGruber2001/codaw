@@ -1,0 +1,44 @@
+{
+  "private": true,
+  "name": "codaw-clip-editor",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The clip editor: a piano roll for notes, a waveform for audio.",
+  "license": "MIT",
+  "keywords": [
+    "theia-extension"
+  ],
+  "files": [
+    "lib",
+    "src"
+  ],
+  "dependencies": {
+    "@theia/core": "1.77.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "rimraf": "^5.0.0",
+    "typescript": "~5.9.3"
+  },
+  "scripts": {
+    "compile": "npm run clean && npm run build",
+    "clean": "rimraf lib",
+    "build": "tsc",
+    "watch": "tsc -w"
+  },
+  "theiaExtensions": [
+    {
+      "frontend": "lib/browser/clip-editor-frontend-module"
+    }
+  ],
+  "peerDependencies": {
+    "react": "^19.2.0"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    "./lib/*.json": "./lib/*.json",
+    "./lib/*.js": "./lib/*.js",
+    "./lib/*": "./lib/*.js",
+    "./*": "./*"
+  }
+}

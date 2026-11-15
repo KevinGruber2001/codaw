@@ -1,0 +1,50 @@
+{
+  "private": true,
+  "name": "codaw-project",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The open CodaW project, read from its TOML files and kept up to date as they change; and the audio of its samples",
+  "license": "MIT",
+  "keywords": [
+    "theia-extension"
+  ],
+  "files": [
+    "lib",
+    "src"
+  ],
+  "dependencies": {
+    "@theia/core": "1.77.0",
+    "@theia/editor": "1.77.0",
+    "@theia/filesystem": "1.77.0",
+    "@theia/monaco": "1.77.0",
+    "@theia/monaco-editor-core": "1.108.201",
+    "@theia/workspace": "1.77.0",
+    "smol-toml": "^1.7.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "rimraf": "^5.0.0",
+    "typescript": "~5.9.3"
+  },
+  "scripts": {
+    "compile": "npm run clean && npm run build",
+    "clean": "rimraf lib",
+    "build": "tsc",
+    "watch": "tsc -w"
+  },
+  "theiaExtensions": [
+    {
+      "frontend": "lib/browser/project-frontend-module"
+    }
+  ],
+  "peerDependencies": {
+    "react": "^19.2.0"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    "./lib/*.json": "./lib/*.json",
+    "./lib/*.js": "./lib/*.js",
+    "./lib/*": "./lib/*.js",
+    "./*": "./*"
+  }
+}

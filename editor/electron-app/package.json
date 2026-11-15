@@ -1,0 +1,84 @@
+{
+  "private": true,
+  "name": "codaw-electron-app",
+  "description": "CodaW desktop product",
+  "productName": "CodaW",
+  "version": "0.1.0",
+  "license": "MIT",
+  "main": "lib/backend/electron-main.js",
+  "homepage": "https://github.com/KevinGruber2001/codaw#readme",
+  "bugs": {
+    "url": "https://github.com/KevinGruber2001/codaw/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KevinGruber2001/codaw.git"
+  },
+  "dependencies": {
+    "@theia/core": "1.77.0",
+    "@theia/editor": "1.77.0",
+    "@theia/electron": "1.77.0",
+    "@theia/file-search": "1.77.0",
+    "@theia/filesystem": "1.77.0",
+    "@theia/keymaps": "1.77.0",
+    "@theia/messages": "1.77.0",
+    "@theia/monaco": "1.77.0",
+    "@theia/navigator": "1.77.0",
+    "@theia/preferences": "1.77.0",
+    "@theia/workspace": "1.77.0",
+    "codaw-product": "0.1.0"
+  },
+  "devDependencies": {
+    "@theia/cli": "1.77.0",
+    "electron": "44.9.1",
+    "electron-builder": "26.15.3",
+    "rimraf": "^5.0.0"
+  },
+  "scripts": {
+    "bundle": "npm run rebuild && theia build --mode development",
+    "bundle:prod": "npm run rebuild && theia build",
+    "clean:dist": "rimraf dist",
+    "package": "npm run clean:dist && npm run rebuild && electron-builder -c.mac.identity=null --publish never",
+    "package:preview": "npm run clean:dist && npm run rebuild && electron-builder -c.mac.identity=null --dir",
+    "rebuild": "theia rebuild:electron --cacheRoot ..",
+    "start": "theia start",
+    "watch": "npm run rebuild && theia build --watch --mode development"
+  },
+  "theia": {
+    "target": "electron",
+    "frontend": {
+      "config": {
+        "applicationName": "CodaW",
+        "preferences": {
+          "files.autoSave": "afterDelay",
+          "files.autoSaveDelay": 500,
+          "[toml]": {
+            "editor.wordBasedSuggestions": "off"
+          },
+          "workbench.colorTheme": "dark"
+        },
+        "electron": {
+          "appUserModelId": "dev.codaw.CodaW",
+          "showWindowEarly": false,
+          "splashScreenOptions": {
+            "content": "resources/codaw-splash.svg",
+            "width": 446,
+            "height": 276
+          }
+        }
+      }
+    },
+    "backend": {
+      "config": {
+        "configurationFolder": ".codaw",
+        "frontendConnectionTimeout": -1,
+        "startupTimeout": -1
+      }
+    },
+    "generator": {
+      "config": {
+        "preloadTemplate": "./resources/preload.html"
+      }
+    }
+  }
+}

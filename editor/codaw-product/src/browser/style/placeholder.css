@@ -1,0 +1,43 @@
+/********************************************************************************
+ * Copyright (C) 2026 Kevin Gruber.
+ *
+ * SPDX-License-Identifier: MIT
+ ********************************************************************************/
+
+/*
+ * A view that is not built yet: its name and purpose, centered in whatever space its area gives it.
+ * Used by the feature packages' placeholder widgets; goes once the last of them is real.
+ */
+.codaw-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+}
+
+.codaw-placeholder-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--theia-ui-padding);
+    max-width: 420px;
+    padding: calc(var(--theia-ui-padding) * 4);
+    text-align: center;
+    color: var(--theia-descriptionForeground);
+}
+
+.codaw-placeholder-icon.codicon {
+    font-size: 32px;
+    opacity: 0.6;
+}
+
+.codaw-placeholder-title {
+    margin: 0;
+    font-weight: 500;
+    color: var(--theia-foreground);
+}
+
+.codaw-placeholder-description {
+    margin: 0;
+    line-height: 1.5;
+}

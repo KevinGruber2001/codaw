@@ -21,6 +21,7 @@ CodaW is a DAW where the session is code you can version, diff, and hand-edit. N
 |------|------|
 | [`codaw/`](codaw/) | The audio engine — a Go + miniaudio (cgo) CLI. Loads/validates a project, plays it, hot-reloads on edit, and renders to WAV. |
 | [`vscode-extension/`](vscode-extension/) | The editor UI, published on Open VSX as `kevingruber.codaw`. |
+| [`editor/`](editor/) | The standalone CodaW application — a desktop and browser editor built on [Eclipse Theia](https://theia-ide.org). Early: branding and shell so far. |
 
 ## Install
 

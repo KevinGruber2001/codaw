@@ -252,6 +252,18 @@ func (w *Watcher) handleTrackChange(file string, old *project.Track, p *project.
 	}
 	updated.SourceFile = file
 
+	if err := validateWith(p, func(c *project.Project) {
+		for i, t := range c.Tracks {
+			if t.ID == old.ID {
+				track := updated
+				c.Tracks[i] = &track
+			}
+		}
+	}); err != nil {
+		logRejected(file, err)
+		return
+	}
+
 	log.Printf("[watcher] track changed: %s", old.ID)
 
 	// ── Diff: compare old vs new, apply targeted mutations ──
@@ -344,6 +356,18 @@ func (w *Watcher) handleBusChange(file string, old *project.Bus, p *project.Proj
 	}
 	updated.SourceFile = file
 
+	if err := validateWith(p, func(c *project.Project) {
+		for i, b := range c.Buses {
+			if b.ID == old.ID {
+				bus := updated
+				c.Buses[i] = &bus
+			}
+		}
+	}); err != nil {
+		logRejected(file, err)
+		return
+	}
+
 	log.Printf("[watcher] bus changed: %s", old.ID)
 
 	if old.Gain != updated.Gain {
@@ -377,6 +401,14 @@ func (w *Watcher) handleMasterChange(file string, p *project.Project) {
 		return
 	}
 	updated.SourceFile = file
+
+	if err := validateWith(p, func(c *project.Project) {
+		master := updated
+		c.Master = &master
+	}); err != nil {
+		logRejected(file, err)
+		return
+	}
 
 	old := p.Master
 	log.Printf("[watcher] master changed")
@@ -477,4 +509,23 @@ func toFloat64(v any) (float64, bool) {
 		return float64(val), true
 	}
 	return 0, false
+}
+
+// validateWith checks a change to one file before it reaches the engine: the project as it would be with
+// the change, validated whole. Whole, because a file can be valid on its own and still break the project,
+// a track sending to a bus that does not exist.
+//
+// A file that does not parse never gets here (the caller logs it and stops). This is for the files that
+// parse but say something the engine must not play, like `gain = 50`: typed by hand, or saved half-typed
+// by an editor's auto-save. Rejected, the engine keeps playing the last valid version, and the next save
+// that fixes the file is applied as usual.
+func validateWith(p *project.Project, change func(candidate *project.Project)) error {
+	candidate := p.Clone()
+	change(candidate)
+	return project.Validate(candidate)
+}
+
+func logRejected(file string, err error) {
+	log.Printf("[watcher] %s not applied, it would make the project invalid (still playing the last valid version):\n%v",
+		filepath.Base(file), err)
 }
