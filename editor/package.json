@@ -32,6 +32,7 @@
     "codaw-clip-editor",
     "codaw-engine",
     "codaw-project",
+    "codaw-language",
     "browser-app",
     "electron-app"
   ]

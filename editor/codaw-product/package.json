@@ -25,7 +25,8 @@
     "codaw-library": "0.1.0",
     "codaw-mixer": "0.1.0",
     "codaw-project": "0.1.0",
-    "codaw-transport": "0.1.0"
+    "codaw-transport": "0.1.0",
+    "codaw-language": "0.1.0"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",
