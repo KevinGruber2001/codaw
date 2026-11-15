@@ -33,6 +33,8 @@ export interface ArrangementViewProps {
     snap: Snap;
     playhead: number;
     selection?: ClipRef;
+    /** The track pasting goes to. */
+    selectedTrack?: number;
     drag?: ClipDrag;
     onSnapChange(snap: Snap): void;
     onRulerPointerDown(event: React.PointerEvent<HTMLElement>): void;
@@ -150,7 +152,8 @@ function TrackRow(props: ArrangementViewProps & {
     const trackColor = { '--codaw-track-color': `var(--codaw-track-color-${track.color % 8})` } as React.CSSProperties;
     return <div className={`codaw-arr-row codaw-arr-track${props.audible ? '' : ' codaw-arr-silent'}`}
         style={{ ...trackColor, height: LANE_HEIGHT }}>
-        <div className='codaw-arr-header codaw-arr-track-header' style={{ width: HEADER_WIDTH }} title={track.file}>
+        <div className={`codaw-arr-header codaw-arr-track-header${props.selectedTrack === index ? ' codaw-arr-track-selected' : ''}`}
+            style={{ width: HEADER_WIDTH }} title={track.file}>
             <button className={`codaw-arr-icon-button ${codicon(track.expanded ? 'chevron-down' : 'chevron-right')}`}
                 style={{ visibility: track.automation.length ? 'visible' : 'hidden' }}
                 title={track.expanded ? 'Hide automation' : 'Show automation'}

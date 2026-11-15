@@ -438,3 +438,8 @@
 .codaw-arr-automation-header:hover .codaw-arr-automation-target {
     text-decoration: underline;
 }
+
+/* The track pasting goes to. */
+.codaw-arr-track-header.codaw-arr-track-selected {
+    background: color-mix(in srgb, var(--codaw-track-color) 14%, var(--codaw-arr-header-background));
+}

@@ -8,6 +8,7 @@ import '../../src/browser/style/arrangement.css';
 
 import { ContainerModule } from '@theia/core/shared/inversify';
 import { CommandContribution } from '@theia/core/lib/common/command';
+import { KeybindingContribution } from '@theia/core/lib/browser/keybinding';
 import { ArrangementContribution } from './arrangement-contribution.js';
 import { ArrangementWidget } from './arrangement-widget.js';
 
@@ -17,4 +18,5 @@ export default new ContainerModule(bind => {
 
     bind(ArrangementContribution).toSelf().inSingletonScope();
     bind(CommandContribution).toService(ArrangementContribution);
+    bind(KeybindingContribution).toService(ArrangementContribution);
 });

@@ -16,10 +16,15 @@ import { ProjectEditService } from 'codaw-project/lib/browser/project-edit-servi
 import { ProjectCommands } from 'codaw-project/lib/browser/project-navigation';
 import { TomlTarget } from 'codaw-project/lib/browser/toml-edits';
 import { CommandService } from '@theia/core/lib/common/command';
+import { ContextKey, ContextKeyService } from '@theia/core/lib/browser/context-key-service';
+import { ArrangementClip } from './arrangement-model.js';
 import { AudioPeaksService } from 'codaw-project/lib/browser/audio-peaks-service';
 import { CodawProject } from 'codaw-project/lib/common/project-model';
 import { EnginePosition } from 'codaw-engine/lib/common/engine-protocol';
 import { EngineService } from 'codaw-engine/lib/browser/engine-service';
+
+/** The context key that is true while the arrangement has the keyboard. */
+export const ARRANGEMENT_FOCUS = 'codawArrangementFocus';
 
 /** The shortest a clip can be trimmed to, in beats. */
 const MIN_CLIP_BEATS = 0.25;
@@ -59,6 +64,12 @@ export class ArrangementWidget extends ReactWidget {
     @inject(CommandService)
     protected readonly commands: CommandService;
 
+    @inject(ContextKeyService)
+    protected readonly contextKeys: ContextKeyService;
+
+    /** True while the arrangement has the keyboard: its keys (copy, paste, delete) apply only then. */
+    protected focusKey: ContextKey<boolean>;
+
     /** The engine's last reported position, and when it arrived, to move the playhead on from. */
     protected lastPosition: EnginePosition = { beat: 0, playing: false };
     protected lastPositionAt = 0;
@@ -70,6 +81,10 @@ export class ArrangementWidget extends ReactWidget {
     protected snap: Snap = 'beat';
     protected playhead = 0;
     protected selection?: ClipRef;
+    /** The track pasting goes to: the selected clip's, or the one whose name was clicked last. */
+    protected selectedTrack?: number;
+    /** The clip copied last; pasted at the playhead. */
+    protected clipboard?: ArrangementClip;
     protected drag?: ClipDrag;
     protected scrubbing = false;
 
@@ -86,6 +101,18 @@ export class ArrangementWidget extends ReactWidget {
         // stop the browser from zooming the whole page on Ctrl+wheel.
         this.node.addEventListener('wheel', this.onWheel, { passive: false });
         this.node.addEventListener('keydown', this.onKeyDown);
+        // Cmd+C and Cmd+V, as the events they cause on the focused element. Whether the browser handles the
+        // keys itself or Theia's Copy and Paste commands do (in Electron, by document.execCommand), these
+        // events come here when the arrangement has the keyboard, and only then.
+        this.node.addEventListener('copy', this.onCopy);
+        this.node.addEventListener('paste', this.onPaste);
+        this.focusKey = this.contextKeys.createKey<boolean>(ARRANGEMENT_FOCUS, false);
+        this.node.addEventListener('focusin', () => this.focusKey.set(true));
+        this.node.addEventListener('focusout', event => {
+            if (!this.node.contains(event.relatedTarget as Node | null)) {
+                this.focusKey.set(false);
+            }
+        });
         this.toDispose.push(this.engine.onDidChangePosition(position => this.onEnginePosition(position)));
         this.toDispose.push(this.projectService.onDidChange(project => this.setProject(project)));
         this.toDispose.push(this.audioPeaks.onDidChange(() => this.update()));
@@ -109,6 +136,9 @@ export class ArrangementWidget extends ReactWidget {
         }
         this.arrangement = project ? fromProject(project, expanded) : { bpm: 120, beatsPerBar: 4, beatUnit: 4, tracks: [] };
         this.drag = undefined;
+        if (this.selectedTrack !== undefined && !this.arrangement.tracks[this.selectedTrack]) {
+            this.selectedTrack = undefined;
+        }
         if (this.selection && !this.arrangement.tracks[this.selection.track]?.clips[this.selection.clip]) {
             this.select(undefined);
         }
@@ -140,6 +170,7 @@ export class ArrangementWidget extends ReactWidget {
             snap={this.snap}
             playhead={this.playhead}
             selection={this.selection}
+            selectedTrack={this.selectedTrack}
             drag={this.drag}
             onSnapChange={this.setSnap}
             onRulerPointerDown={this.onRulerPointerDown}
@@ -183,7 +214,11 @@ export class ArrangementWidget extends ReactWidget {
         }
     }
 
-    protected readonly revealTrack = (track: number): void => this.reveal(track);
+    protected readonly revealTrack = (track: number): void => {
+        this.selectedTrack = track;
+        this.update();
+        this.reveal(track);
+    };
     protected readonly revealAutomation = (track: number, lane: number): void =>
         this.reveal(track, { section: 'automation', index: lane });
 
@@ -401,6 +436,9 @@ export class ArrangementWidget extends ReactWidget {
 
     protected select(ref: ClipRef | undefined): void {
         this.selection = ref;
+        if (ref) {
+            this.selectedTrack = ref.track;
+        }
         // The application-wide selection, for the inspector to show what is selected here.
         this.selectionService.selection = ref && {
             kind: 'codaw.clip',
@@ -417,7 +455,113 @@ export class ArrangementWidget extends ReactWidget {
         }
     };
 
+    // ── copy, paste, delete ───────────────────────────────────────────────────────────────────────
+
+    /** Whether the arrangement has the keyboard. */
+    get hasFocus(): boolean {
+        return this.node.contains(document.activeElement);
+    }
+
+    get canCopy(): boolean {
+        return !!this.selection;
+    }
+
+    get canPaste(): boolean {
+        return !!this.clipboard && this.selectedTrack !== undefined && !!this.arrangement.tracks[this.selectedTrack];
+    }
+
+    /** Copies the selected clip, and puts it on the system clipboard as a [[clip]] table. */
+    copyToClipboard(): void {
+        const toml = this.copySelection();
+        if (toml !== undefined) {
+            navigator.clipboard?.writeText(toml).catch(() => { /* no clipboard access: pasting here still works */ });
+        }
+    }
+
+    protected readonly onCopy = (event: ClipboardEvent): void => {
+        const toml = this.copySelection();
+        if (toml !== undefined) {
+            event.preventDefault();
+            event.clipboardData?.setData('text/plain', toml);
+        }
+    };
+
+    protected readonly onPaste = (event: ClipboardEvent): void => {
+        if (this.canPaste) {
+            event.preventDefault();
+            this.paste();
+        }
+    };
+
+    /**
+     * Copies the selected clip, for pasting here; returns it as a [[clip]] table, which the copy event
+     * puts on the system clipboard (so it can be pasted into a file as text, too).
+     */
+    copySelection(): string | undefined {
+        const ref = this.selection;
+        if (!ref) {
+            return undefined;
+        }
+        const clip = { ...this.arrangement.tracks[ref.track].clips[ref.clip] };
+        this.clipboard = clip;
+        const toml = ['[[clip]]', `file   = "${clip.file}"`, `start  = ${clip.start}`, `end    = ${clip.end}`,
+            `loop   = ${clip.loop}`, `gain   = ${clip.gain}`, `offset = ${clip.offset}`].join('\n');
+        return toml;
+    }
+
+    /**
+     * Pastes the copied clip on the selected track, starting at the playhead (on the snap grid), as a new
+     * [[clip]] after the track's last one. The new clip is selected, so it can be copied on in turn.
+     */
+    paste(): void {
+        const clip = this.clipboard;
+        const index = this.selectedTrack;
+        if (!clip || index === undefined) {
+            return;
+        }
+        const track = this.arrangement.tracks[index];
+        if (!track) {
+            return;
+        }
+        const start = Math.max(0, snapBeat(this.playhead, this.step));
+        const pasted: ArrangementClip = { ...clip, start, end: start + (clip.end - clip.start) };
+        // In the view at once, as the last clip, which is where it goes in the file too.
+        track.clips.push(pasted);
+        this.select({ track: index, clip: track.clips.length - 1 });
+        this.update();
+        this.edits.addClip(track.uri, pasted);
+    }
+
+    /** Deletes the selected clip from its track's file. */
+    deleteSelection(): void {
+        const ref = this.selection;
+        if (!ref) {
+            return;
+        }
+        const track = this.arrangement.tracks[ref.track];
+        track.clips.splice(ref.clip, 1);
+        this.select(undefined);
+        this.update();
+        this.edits.removeClip(track.uri, ref.clip);
+    }
+
     protected readonly onKeyDown = (event: KeyboardEvent): void => {
+        // Cmd+C / Cmd+V where nothing else took them (in a browser, Theia binds no copy or paste of its own
+        // to an element that is not text). In Electron, Theia's Copy and Paste take the keys first and come
+        // here through the handlers in ArrangementContribution instead.
+        if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey) {
+            const key = event.key.toLowerCase();
+            if (key === 'c' && this.canCopy) {
+                event.preventDefault();
+                this.copyToClipboard();
+                return;
+            }
+            if (key === 'v' && this.canPaste) {
+                event.preventDefault();
+                this.paste();
+                return;
+            }
+        }
         if (event.key === 'Escape') {
             this.clearSelection();
         }
