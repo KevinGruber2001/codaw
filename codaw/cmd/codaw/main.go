@@ -50,6 +50,7 @@ func init() {
 	rootCmd.AddCommand(watchCmd)
 	rootCmd.AddCommand(renderCmd)
 	rootCmd.AddCommand(serveCmd)
+	rootCmd.AddCommand(lspCmd)
 }
 
 // ─────────────────────────────────────────────
