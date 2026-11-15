@@ -48,27 +48,46 @@
     cursor: default;
 }
 
-.codaw-tp-buttons {
+.codaw-tp-icon {
+    display: block;
+}
+
+/*
+ * The transport's buttons as one segmented control, after Logic: a recessed group with thin dividers.
+ * The modes (cycle, metronome) are a second, smaller group to the right of the display.
+ */
+.codaw-tp-segment,
+.codaw-tp-modes {
     display: flex;
-    gap: 2px;
+    padding: 2px;
+    border-radius: 7px;
+    /* A raised panel a few shades lighter than the bar, as Logic's buttons sit on: not a dark hole in it. */
+    background: color-mix(in srgb, var(--theia-foreground) 11%, var(--theia-titleBar-activeBackground));
+    border: 1px solid color-mix(in srgb, var(--theia-foreground) 14%, transparent);
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
 }
 
 .codaw-transport-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 34px;
+    height: 26px;
     padding: 0;
     border: none;
-    border-radius: 4px;
+    border-radius: 5px;
     background: transparent;
-    color: var(--theia-foreground);
+    color: color-mix(in srgb, var(--theia-foreground) 90%, transparent);
     cursor: pointer;
 }
 
-.codaw-transport-button .codicon {
-    font-size: 16px;
+.codaw-transport-button:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--theia-foreground) 12%, transparent);
+    color: var(--theia-foreground);
+}
+
+.codaw-transport-button:active:not(:disabled) {
+    background: color-mix(in srgb, var(--theia-foreground) 20%, transparent);
 }
 
 .codaw-transport-button:disabled {
@@ -76,31 +95,33 @@
     cursor: default;
 }
 
-.codaw-transport-button:hover:not(:disabled) {
-    background: var(--theia-toolbar-hoverBackground);
-}
-
 .codaw-transport-button:focus-visible {
     outline: 1px solid var(--theia-focusBorder);
     outline-offset: -1px;
 }
 
-/* Record is red, play green: the two colors every DAW gives them. */
+/* Play is green and lit while playing; record red; cycle yellow when on: the colors every DAW uses. */
+.codaw-tp-play.codaw-transport-button-on {
+    color: #3ddc6e;
+    background: color-mix(in srgb, #3ddc6e 16%, transparent);
+}
+
 .codaw-tp-record {
-    color: #ff5a5a;
+    color: #ff4d4d;
 }
 
-.codaw-tp-record .codicon {
-    font-size: 12px;
+.codaw-tp-record:disabled {
+    opacity: 0.45;
 }
 
-.codaw-tp-play {
-    color: var(--theia-terminal-ansiGreen);
+.codaw-tp-cycle.codaw-transport-button-on {
+    color: #1d1d1d;
+    background: #f2c230;
 }
 
-/* Playing, and loop switched on, take the brand accent, the color of the bar in the icon. */
-.codaw-transport-button-on {
-    color: var(--codaw-branding-accent, var(--theia-focusBorder));
+.codaw-tp-cycle.codaw-transport-button-on:hover {
+    background: #f6cf55;
+    color: #1d1d1d;
 }
 
 /* The readout: large figures, each with a small label underneath. Tabular figures, so they do not jitter. */
@@ -146,10 +167,6 @@
     text-transform: uppercase;
     color: var(--theia-textLink-foreground);
     opacity: 0.8;
-}
-
-.codaw-tp-metronome {
-    color: var(--theia-descriptionForeground);
 }
 
 .codaw-tp-spacer {

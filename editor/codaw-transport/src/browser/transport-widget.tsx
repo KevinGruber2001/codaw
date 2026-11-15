@@ -7,12 +7,15 @@
 import * as React from '@theia/core/shared/react';
 
 import { TransportService } from './transport-service.js';
-import { ReactWidget, codicon } from '@theia/core/lib/browser';
+import { ReactWidget } from '@theia/core/lib/browser';
 import { inject, injectable, postConstruct } from '@theia/core/shared/inversify';
 
 import { CommandRegistry } from '@theia/core/lib/common/command';
 import { Message } from '@theia/core/shared/@lumino/messaging';
 import { TransportCommands } from './transport-commands.js';
+import {
+    CycleIcon, ForwardIcon, GoToStartIcon, MetronomeIcon, PauseIcon, PlayIcon, RecordIcon, RewindIcon, StopIcon
+} from './transport-icons.js';
 import { ProjectCommands } from 'codaw-project/lib/browser/project-navigation';
 
 /**
@@ -65,15 +68,17 @@ export class TransportWidget extends ReactWidget {
                 {project ?? 'No project'}
             </button>
 
-            <div className='codaw-tp-buttons'>
+            <div className='codaw-tp-segment' role='group' aria-label='Transport'>
+                {this.renderButton(TransportCommands.RETURN_TO_START.id, <GoToStartIcon />, 'Go to Start (Home)')}
+                {this.renderButton(TransportCommands.REWIND.id, <RewindIcon />, 'Rewind One Bar (,)')}
+                {this.renderButton(TransportCommands.FORWARD.id, <ForwardIcon />, 'Forward One Bar (.)')}
+                {this.renderButton(TransportCommands.STOP.id, <StopIcon />, 'Stop, and back to the start')}
+                {this.renderButton(TransportCommands.TOGGLE_PLAY.id, state.playing ? <PauseIcon /> : <PlayIcon />,
+                    state.playing ? 'Pause (Space)' : 'Play (Space)', { active: state.playing, className: 'codaw-tp-play' })}
                 <button type='button' className='codaw-transport-button codaw-tp-record' disabled
                     title='Record (the engine cannot record yet)' aria-label='Record'>
-                    <i className={codicon('circle-large-filled')}></i>
+                    <RecordIcon />
                 </button>
-                {this.renderButton(TransportCommands.TOGGLE_PLAY.id, state.playing ? 'debug-pause' : 'play',
-                    state.playing ? 'Pause (Space)' : 'Play (Space)', { active: state.playing, className: 'codaw-tp-play' })}
-                {this.renderButton(TransportCommands.STOP.id, 'primitive-square', 'Stop, and back to the start')}
-                {this.renderButton(TransportCommands.TOGGLE_LOOP.id, 'sync', 'Loop (not in the engine yet)', { pressed: state.looping })}
             </div>
 
             <div className='codaw-tp-readout' aria-live='off'>
@@ -84,10 +89,14 @@ export class TransportWidget extends ReactWidget {
                     onClick={openTransportSettings} />
             </div>
 
-            <button type='button' className='codaw-transport-button codaw-tp-metronome' disabled
-                title='Metronome (not in the engine yet)' aria-label='Metronome'>
-                <MetronomeIcon />
-            </button>
+            <div className='codaw-tp-modes' role='group' aria-label='Modes'>
+                {this.renderButton(TransportCommands.TOGGLE_LOOP.id, <CycleIcon />, 'Cycle (not in the engine yet)',
+                    { pressed: state.looping, className: 'codaw-tp-cycle' })}
+                <button type='button' className='codaw-transport-button codaw-tp-mode' disabled
+                    title='Metronome (not in the engine yet)' aria-label='Metronome'>
+                    <MetronomeIcon />
+                </button>
+            </div>
 
             <div className='codaw-tp-spacer'></div>
 
@@ -103,7 +112,7 @@ export class TransportWidget extends ReactWidget {
      * @param options.active highlights a button that reflects a running state (playing) without being a toggle.
      * @param options.className an extra class, for a button with a color of its own (play).
      */
-    protected renderButton(commandId: string, icon: string, label: string,
+    protected renderButton(commandId: string, icon: React.ReactNode, label: string,
         options: { pressed?: boolean; active?: boolean; className?: string } = {}): React.ReactNode {
         const classes = ['codaw-transport-button'];
         if (options.className) {
@@ -121,7 +130,7 @@ export class TransportWidget extends ReactWidget {
             disabled={!this.commands.isEnabled(commandId)}
             onClick={() => this.commands.executeCommand(commandId)}
         >
-            <i className={codicon(icon)}></i>
+            {icon}
         </button>;
     }
 }
@@ -137,11 +146,3 @@ function Field(props: { value: string; label: string; title: string; onClick?: (
         : <span className='codaw-tp-field' title={props.title}>{content}</span>;
 }
 
-/** No codicon for a metronome: a small one, drawn in the current text color. */
-function MetronomeIcon(): React.ReactElement {
-    return <svg width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='currentColor' strokeWidth='1.3' strokeLinejoin='round'>
-        <path d='M5.5 1.5h5l3 13h-11z' />
-        <path d='M8 11.5l4-7' strokeLinecap='round' />
-        <path d='M3.6 10.5h8.8' />
-    </svg>;
-}

@@ -38,6 +38,14 @@ export class TransportContribution implements CommandContribution, KeybindingCon
             execute: () => this.transport.returnToStart(),
             isEnabled: ready
         });
+        commands.registerCommand(TransportCommands.REWIND, {
+            execute: () => this.transport.stepBars(-1),
+            isEnabled: ready
+        });
+        commands.registerCommand(TransportCommands.FORWARD, {
+            execute: () => this.transport.stepBars(1),
+            isEnabled: ready
+        });
         commands.registerCommand(TransportCommands.TOGGLE_LOOP, {
             execute: () => this.transport.toggleLoop(),
             // Lets menus and the palette show loop as a toggle with its current state.
@@ -49,6 +57,17 @@ export class TransportContribution implements CommandContribution, KeybindingCon
         keybindings.registerKeybinding({
             command: TransportCommands.TOGGLE_PLAY.id,
             keybinding: 'space',
+            when: NOT_TYPING
+        });
+        // Rewind and forward on "," and ".", as in Logic.
+        keybindings.registerKeybinding({
+            command: TransportCommands.REWIND.id,
+            keybinding: ',',
+            when: NOT_TYPING
+        });
+        keybindings.registerKeybinding({
+            command: TransportCommands.FORWARD.id,
+            keybinding: '.',
             when: NOT_TYPING
         });
         keybindings.registerKeybinding({

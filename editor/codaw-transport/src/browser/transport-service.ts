@@ -101,6 +101,18 @@ export class TransportService {
         await this.engine.seek(0);
     }
 
+    /**
+     * Moves the playhead whole bars: to the start of the bar `bars` away from the one it is in. Back from
+     * the middle of a bar goes to that bar's start first, as rewinding does on a tape machine.
+     */
+    async stepBars(bars: number): Promise<void> {
+        const { positionBeats, beatsPerBar } = this.state;
+        const barStart = Math.floor(positionBeats / beatsPerBar) * beatsPerBar;
+        const midBar = positionBeats - barStart > 0.01;
+        const target = bars < 0 && midBar ? barStart + (bars + 1) * beatsPerBar : barStart + bars * beatsPerBar;
+        await this.engine.seek(Math.max(0, target));
+    }
+
     toggleLoop(): void {
         this.looping = !this.looping;
         this.fireChange();
