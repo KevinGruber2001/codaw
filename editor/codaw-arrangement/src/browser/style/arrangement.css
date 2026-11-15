@@ -1,0 +1,440 @@
+/********************************************************************************
+ * Copyright (C) 2026 Kevin Gruber.
+ *
+ * SPDX-License-Identifier: MIT
+ ********************************************************************************/
+
+/*
+ * The arrangement view. Colors come from the theme (`--theia-*`), so it follows light and dark; the track
+ * colors from codaw-project's palette (`--codaw-track-color-*`).
+ */
+:root {
+    --codaw-arr-bar-line: color-mix(in srgb, var(--theia-foreground) 16%, transparent);
+    --codaw-arr-beat-line: color-mix(in srgb, var(--theia-foreground) 6%, transparent);
+    --codaw-arr-phrase-shade: color-mix(in srgb, var(--theia-foreground) 2.5%, transparent);
+    --codaw-arr-header-background: var(--theia-sideBar-background);
+    --codaw-arr-accent: var(--codaw-branding-accent, var(--theia-focusBorder));
+}
+
+.codaw-arrangement {
+    display: flex;
+    flex-direction: column;
+    background: var(--theia-editor-background);
+    outline: none;
+    user-select: none;
+}
+
+.codaw-arr-scroller {
+    flex: 1 1 auto;
+    overflow: auto;
+    position: relative;
+}
+
+.codaw-arr-content {
+    position: relative;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.codaw-arr-row {
+    display: flex;
+    flex: none;
+    border-bottom: 1px solid var(--theia-panel-border);
+}
+
+/* The column of track headers, which stays put while the lanes scroll sideways under it. */
+.codaw-arr-header {
+    position: sticky;
+    left: 0;
+    z-index: 3;
+    flex: none;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px 0 4px;
+    background: var(--codaw-arr-header-background);
+    border-right: 1px solid var(--theia-panel-border);
+}
+
+.codaw-arr-lane {
+    position: relative;
+    flex: none;
+}
+
+/* Bar lines, beat lines, and every other 8-bar stretch shaded, as background images. */
+.codaw-arr-grid {
+    background-image:
+        linear-gradient(to right, var(--codaw-arr-bar-line) 1px, transparent 1px),
+        linear-gradient(to right, var(--codaw-arr-beat-line) 1px, transparent 1px),
+        linear-gradient(to right, transparent 50%, var(--codaw-arr-phrase-shade) 50%);
+    background-size: var(--codaw-bar-px) 100%, var(--codaw-beat-px) 100%, var(--codaw-phrase-px) 100%;
+}
+
+/* The filler under the last track takes the remaining height, so the grid reaches the bottom. */
+.codaw-arr-filler {
+    flex: 1 1 auto;
+    border-bottom: none;
+}
+
+/* ── ruler ───────────────────────────────────────────────────────────────────────────────────────── */
+
+.codaw-arr-ruler-row {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    height: 30px;
+    background: var(--codaw-arr-header-background);
+}
+
+.codaw-arr-corner {
+    z-index: 5;
+}
+
+.codaw-arr-snap {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--theia-descriptionForeground);
+}
+
+.codaw-arr-snap select {
+    min-width: 0;
+    height: 22px;
+    padding: 0 4px;
+}
+
+.codaw-arr-ruler {
+    position: relative;
+    flex: none;
+    cursor: text;
+    /* Beat ticks along the bottom edge, bar ticks the full height. */
+    background-image:
+        linear-gradient(to right, var(--codaw-arr-bar-line) 1px, transparent 1px),
+        linear-gradient(to right, var(--codaw-arr-bar-line) 1px, transparent 1px);
+    background-size: var(--codaw-bar-px) 100%, var(--codaw-beat-px) 6px;
+    background-position: 0 0, 0 100%;
+    background-repeat: repeat-x;
+}
+
+.codaw-arr-bar-label {
+    position: absolute;
+    top: 3px;
+    padding-left: 4px;
+    font-size: var(--theia-ui-font-size0);
+    font-variant-numeric: tabular-nums;
+    color: var(--theia-descriptionForeground);
+    pointer-events: none;
+}
+
+.codaw-arr-loop {
+    position: absolute;
+    top: 0;
+    height: 5px;
+    background: color-mix(in srgb, var(--codaw-arr-accent) 70%, transparent);
+    border-radius: 0 0 2px 2px;
+}
+
+.codaw-arr-playhead-marker {
+    position: absolute;
+    bottom: 0;
+    width: 0;
+    height: 0;
+    margin-left: -5px;
+    border: 5px solid transparent;
+    border-top: 7px solid var(--codaw-arr-accent);
+    border-bottom: none;
+    pointer-events: none;
+}
+
+.codaw-arr-playhead {
+    position: absolute;
+    top: 30px;
+    bottom: 0;
+    width: 1px;
+    background: var(--codaw-arr-accent);
+    pointer-events: none;
+    z-index: 2;
+}
+
+/* ── track headers ───────────────────────────────────────────────────────────────────────────────── */
+
+.codaw-arr-track-header {
+    /* The track's color as a strip down the left edge. */
+    box-shadow: inset 3px 0 0 var(--codaw-track-color);
+}
+
+.codaw-arr-track-names {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.codaw-arr-track-name {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.codaw-arr-track-route {
+    font-size: var(--theia-ui-font-size0);
+    color: var(--theia-descriptionForeground);
+}
+
+.codaw-arr-track-toggles {
+    display: flex;
+    gap: 3px;
+}
+
+.codaw-arr-icon-button,
+.codaw-arr-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--theia-foreground);
+    cursor: pointer;
+}
+
+.codaw-arr-icon-button {
+    width: 18px;
+    height: 18px;
+    color: var(--theia-descriptionForeground);
+}
+
+.codaw-arr-toggle {
+    width: 20px;
+    height: 18px;
+    font-size: 10px;
+    font-weight: 700;
+    background: color-mix(in srgb, var(--theia-foreground) 10%, transparent);
+    color: var(--theia-descriptionForeground);
+}
+
+.codaw-arr-icon-button:hover,
+.codaw-arr-toggle:hover {
+    background: var(--theia-toolbar-hoverBackground);
+}
+
+.codaw-arr-mute.codaw-arr-on {
+    background: var(--theia-terminal-ansiYellow);
+    color: #000;
+}
+
+.codaw-arr-solo.codaw-arr-on {
+    background: var(--theia-terminal-ansiGreen);
+    color: #000;
+}
+
+/* A muted track, or one silenced by another track's solo: its clips fade back. */
+.codaw-arr-silent .codaw-arr-clip {
+    opacity: 0.4;
+    filter: saturate(0.3);
+}
+
+.codaw-arr-silent .codaw-arr-track-name {
+    color: var(--theia-descriptionForeground);
+}
+
+/* ── clips ───────────────────────────────────────────────────────────────────────────────────────── */
+
+.codaw-arr-clip {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 4px;
+    border: 1px solid color-mix(in srgb, var(--codaw-track-color) 70%, var(--theia-editor-background));
+    background: color-mix(in srgb, var(--codaw-track-color) 22%, var(--theia-editor-background));
+    cursor: grab;
+    touch-action: none;
+}
+
+.codaw-arr-clip:hover {
+    border-color: var(--codaw-track-color);
+}
+
+.codaw-arr-clip.codaw-arr-selected {
+    border-color: var(--theia-foreground);
+    box-shadow: 0 0 0 1px var(--theia-foreground);
+    z-index: 1;
+}
+
+.codaw-arr-clip.codaw-arr-dragging {
+    cursor: grabbing;
+    opacity: 0.9;
+    z-index: 2;
+}
+
+.codaw-arr-clip-header {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    flex: none;
+    height: 16px;
+    padding: 0 5px;
+    background: color-mix(in srgb, var(--codaw-track-color) 45%, var(--theia-editor-background));
+    font-size: var(--theia-ui-font-size0);
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.codaw-arr-clip-header .codicon {
+    font-size: 10px;
+}
+
+.codaw-arr-clip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.codaw-arr-waveform {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
+}
+
+.codaw-arr-waveform polygon {
+    fill: color-mix(in srgb, var(--codaw-track-color) 75%, var(--theia-foreground));
+    opacity: 0.75;
+}
+
+/* Grab zones at either end of a clip, for trimming it. */
+.codaw-arr-clip-edge {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    cursor: ew-resize;
+}
+
+.codaw-arr-clip-edge-start {
+    left: 0;
+}
+
+.codaw-arr-clip-edge-end {
+    right: 0;
+}
+
+/* ── automation ──────────────────────────────────────────────────────────────────────────────────── */
+
+.codaw-arr-automation-header {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 0;
+    padding-left: 28px;
+    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--codaw-track-color) 45%, transparent);
+}
+
+.codaw-arr-automation-target {
+    font-family: var(--theia-code-font-family);
+    font-size: var(--theia-ui-font-size0);
+}
+
+.codaw-arr-automation-range {
+    font-size: var(--theia-ui-font-size0);
+    color: var(--theia-descriptionForeground);
+}
+
+.codaw-arr-automation .codaw-arr-lane {
+    background-color: color-mix(in srgb, var(--codaw-track-color) 4%, transparent);
+}
+
+.codaw-arr-automation-curve {
+    position: absolute;
+    left: 0;
+    top: 0;
+    overflow: visible;
+}
+
+.codaw-arr-automation-curve polyline {
+    fill: none;
+    stroke: var(--codaw-track-color);
+    stroke-width: 1.5;
+}
+
+.codaw-arr-automation-curve circle {
+    fill: var(--theia-editor-background);
+    stroke: var(--codaw-track-color);
+    stroke-width: 1.5;
+}
+
+/* ── no project, and files that do not parse ─────────────────────────────────────────────────────── */
+
+.codaw-arr-empty {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    color: var(--theia-descriptionForeground);
+}
+
+.codaw-arr-empty > .codicon {
+    font-size: 32px;
+    opacity: 0.6;
+}
+
+.codaw-arr-empty p {
+    margin: 0;
+}
+
+.codaw-arr-empty-hint {
+    font-size: var(--theia-ui-font-size0);
+}
+
+.codaw-arr-problems {
+    flex: none;
+    padding: 6px 12px;
+    background: var(--theia-inputValidation-warningBackground);
+    border-bottom: 1px solid var(--theia-inputValidation-warningBorder);
+    font-size: var(--theia-ui-font-size0);
+    user-select: text;
+}
+
+.codaw-arr-problems .codicon {
+    color: var(--theia-editorWarning-foreground);
+    font-size: 12px;
+    vertical-align: text-bottom;
+}
+
+.codaw-arr-clip-warning {
+    color: var(--theia-editorWarning-foreground);
+}
+
+/* A track whose file has unsaved changes. */
+.codaw-arr-track-dirty {
+    color: var(--theia-editorWarning-foreground);
+}
+
+/* The zoom buttons, next to snap in the corner. */
+.codaw-arr-corner {
+    justify-content: space-between;
+}
+
+.codaw-arr-zoom {
+    display: flex;
+    gap: 1px;
+}
+
+/* Track names and automation headers open their file. */
+.codaw-arr-track-names,
+.codaw-arr-automation-header {
+    cursor: pointer;
+}
+
+.codaw-arr-track-names:hover .codaw-arr-track-name,
+.codaw-arr-automation-header:hover .codaw-arr-automation-target {
+    text-decoration: underline;
+}
