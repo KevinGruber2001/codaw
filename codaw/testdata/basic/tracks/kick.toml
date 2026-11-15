@@ -1,6 +1,6 @@
 id   = "kick"
 bus  = "drums"
-gain = -0.3
+gain = -23.0
 pan  = -0.02
 mute = false
 solo = false
@@ -14,12 +14,29 @@ mid_db = -4.0
 high_hz = 8000
 high_db = -2.0
 
+[[fx]]
+type   = "eq_3band"
+low_hz = 60
+low_db = 3.0
+mid_hz = 400
+mid_db = -4.0
+high_hz = 8000
+high_db = -2.0
+
 [[clip]]
 file  = "samples/kick_01.wav"
-start = 5.0
-end   = 7.0
+start = 1.0
+end   = 8.0
 loop  = true
 gain  = -10.0
+
+[[clip]]
+file   = "samples/kick_01.wav"
+start  = 12.0
+end    = 19.0
+loop   = true
+gain   = -10.0
+offset = 0.0
 
 [[automation]]
 target = "gain"
@@ -31,3 +48,7 @@ value = -24.0
 [[automation.point]]
 beat  = 16
 value = 6.0
+
+[[automation.point]]
+beat  = 18
+value = -50.0
