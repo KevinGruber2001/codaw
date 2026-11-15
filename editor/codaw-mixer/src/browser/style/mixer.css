@@ -1,0 +1,336 @@
+/********************************************************************************
+ * Copyright (C) 2026 Kevin Gruber.
+ *
+ * SPDX-License-Identifier: MIT
+ ********************************************************************************/
+
+/*
+ * The mixer, after openDAW's: a row of dark channel strips, each laid out top to bottom like a console
+ * channel. Rows line up across strips; the legend on the left names them.
+ */
+.codaw-mixer {
+    overflow: auto;
+    background: var(--theia-panel-background, var(--theia-editor-background));
+    user-select: none;
+}
+
+.codaw-mixer-empty {
+    padding: 16px;
+    color: var(--theia-descriptionForeground);
+}
+
+.codaw-mixer-strips {
+    display: flex;
+    gap: 4px;
+    height: 100%;
+    min-height: 300px;
+    padding: 6px;
+    box-sizing: border-box;
+}
+
+/* The rows of every strip, and the legend's labels, share these heights. */
+.codaw-mixer-legend,
+.codaw-strip {
+    display: grid;
+    grid-template-rows: 30px 22px 20px 34px 34px 20px 1fr 26px;
+    row-gap: 4px;
+}
+
+.codaw-mixer-legend {
+    width: 52px;
+    padding: 6px 0;
+    color: var(--theia-descriptionForeground);
+    font-size: 10px;
+}
+
+.codaw-mixer-legend > span {
+    display: flex;
+    align-items: center;
+}
+
+.codaw-strip {
+    flex: none;
+    width: 78px;
+    padding: 6px 6px;
+    box-sizing: border-box;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--theia-foreground) 5%, var(--theia-editor-background));
+    border-top: 2px solid transparent;
+}
+
+.codaw-strip-master {
+    margin-left: 8px;
+}
+
+.codaw-strip-head {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.codaw-strip-icon.codicon {
+    font-size: 22px;
+    color: var(--codaw-strip-color);
+}
+
+.codaw-strip-bus .codaw-strip-icon {
+    color: var(--theia-textLink-foreground);
+}
+
+.codaw-strip-name,
+.codaw-strip-output {
+    overflow: hidden;
+    padding: 0 4px;
+    border-radius: 3px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
+    font-size: 11px;
+    line-height: 20px;
+}
+
+.codaw-strip-name {
+    border: none;
+    background: color-mix(in srgb, var(--theia-foreground) 8%, transparent);
+    color: var(--codaw-strip-color);
+    font-family: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.codaw-strip-master .codaw-strip-name {
+    color: var(--theia-foreground);
+}
+
+.codaw-strip-name:hover {
+    background: color-mix(in srgb, var(--theia-foreground) 14%, transparent);
+}
+
+.codaw-strip-dirty {
+    color: var(--theia-editorWarning-foreground);
+}
+
+.codaw-strip-output {
+    color: var(--theia-textLink-foreground);
+}
+
+.codaw-strip-fx {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: center;
+    justify-content: center;
+    gap: 2px;
+    overflow: hidden;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--theia-foreground) 4%, transparent);
+}
+
+.codaw-strip-fx-none {
+    color: var(--theia-descriptionForeground);
+    font-size: 10px;
+}
+
+.codaw-strip-fx-chip {
+    max-width: 100%;
+    padding: 0 4px;
+    overflow: hidden;
+    border: none;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--theia-foreground) 10%, transparent);
+    color: var(--theia-foreground);
+    font-family: inherit;
+    font-size: 9px;
+    line-height: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.codaw-strip-fx-chip:hover {
+    background: color-mix(in srgb, var(--theia-foreground) 18%, transparent);
+}
+
+.codaw-strip-pan {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.codaw-knob {
+    display: inline-flex;
+    cursor: ns-resize;
+    touch-action: none;
+}
+
+.codaw-knob-track {
+    fill: none;
+    stroke: color-mix(in srgb, var(--theia-foreground) 18%, transparent);
+    stroke-width: 2.5;
+    stroke-linecap: round;
+}
+
+.codaw-knob-value {
+    fill: none;
+    stroke: var(--codaw-strip-color);
+    stroke-width: 2.5;
+    stroke-linecap: round;
+}
+
+.codaw-knob-body {
+    fill: color-mix(in srgb, var(--theia-foreground) 22%, var(--theia-editor-background));
+}
+
+.codaw-knob-pointer {
+    stroke: var(--theia-foreground);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+}
+
+.codaw-strip-values {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+}
+
+.codaw-strip-value {
+    padding: 0 2px;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--theia-foreground) 6%, transparent);
+    font-family: var(--theia-code-font-family);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    line-height: 20px;
+    text-align: center;
+}
+
+.codaw-strip-peak {
+    color: var(--theia-descriptionForeground);
+}
+
+/* Fader, meters and scale side by side, filling the strip's free height. */
+.codaw-strip-fader-area {
+    display: grid;
+    grid-template-columns: 22px 12px 1fr;
+    gap: 4px;
+    min-height: 90px;
+    padding: 6px 0;
+}
+
+.codaw-strip-fader {
+    position: relative;
+    cursor: ns-resize;
+    touch-action: none;
+}
+
+.codaw-strip-fader-groove {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 4px;
+    margin-left: -2px;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--theia-foreground) 12%, transparent);
+}
+
+.codaw-strip-fader-cap {
+    position: absolute;
+    left: 1px;
+    right: 1px;
+    height: 26px;
+    margin-bottom: -13px;
+    border-radius: 3px;
+    background: linear-gradient(to bottom,
+        color-mix(in srgb, var(--theia-foreground) 30%, var(--theia-editor-background)),
+        color-mix(in srgb, var(--theia-foreground) 16%, var(--theia-editor-background)));
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* The line across the cap, where the level is read. */
+.codaw-strip-fader-cap::after {
+    content: '';
+    position: absolute;
+    left: 3px;
+    right: 3px;
+    top: 50%;
+    height: 1px;
+    background: var(--theia-foreground);
+    opacity: 0.8;
+}
+
+.codaw-strip-meters {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+}
+
+.codaw-strip-meter {
+    position: relative;
+    border-radius: 1px;
+    background: color-mix(in srgb, var(--theia-foreground) 8%, transparent);
+    overflow: hidden;
+}
+
+/* Green, then yellow from about -12 dB, then red above 0: drawn over the meter's full height. */
+.codaw-strip-meter-level {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(to top, #6fd3a0 0 62%, #e9d36b 62% 86%, #ff6a5a 86%);
+    background-attachment: local;
+}
+
+.codaw-strip-scale {
+    position: relative;
+    font-size: 8px;
+    font-variant-numeric: tabular-nums;
+    color: var(--theia-descriptionForeground);
+}
+
+.codaw-strip-scale span {
+    position: absolute;
+    left: 0;
+    transform: translateY(50%);
+    line-height: 1;
+}
+
+.codaw-strip-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+}
+
+.codaw-strip-toggle {
+    width: 22px;
+    height: 20px;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--theia-foreground) 22%, transparent);
+    border-radius: 3px;
+    background: transparent;
+    color: var(--theia-descriptionForeground);
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.codaw-strip-toggle:hover {
+    color: var(--theia-foreground);
+}
+
+.codaw-strip-mute.codaw-strip-on {
+    border-color: var(--theia-terminal-ansiYellow);
+    background: var(--theia-terminal-ansiYellow);
+    color: #000;
+}
+
+.codaw-strip-solo.codaw-strip-on {
+    border-color: var(--theia-terminal-ansiGreen);
+    background: var(--theia-terminal-ansiGreen);
+    color: #000;
+}
+
+/* A muted strip fades back, except its mute button. */
+.codaw-strip-muted > :not(.codaw-strip-buttons) {
+    opacity: 0.45;
+}
