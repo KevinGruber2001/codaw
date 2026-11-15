@@ -1,0 +1,38 @@
+{
+  "private": true,
+  "name": "codaw-editor",
+  "description": "CodaW \u2014 a code-first DAW, as a Theia application",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18",
+    "npm": ">=8"
+  },
+  "scripts": {
+    "build:engine": "cd ../codaw && go build -o bin/codaw ./cmd/codaw",
+    "build:browser": "npm --prefix browser-app run bundle",
+    "build:electron": "npm --prefix electron-app run bundle",
+    "prepare": "lerna run compile",
+    "postinstall": "theia check:theia-version",
+    "start:browser": "PATH=\"$PWD/../codaw/bin:$PATH\" npm --prefix browser-app start --",
+    "start:electron": "PATH=\"$PWD/../codaw/bin:$PATH\" npm --prefix electron-app start --",
+    "watch:browser": "lerna run --parallel watch --ignore electron-app",
+    "watch:electron": "lerna run --parallel watch --ignore browser-app",
+    "icons": "python3 scripts/gen-icons.py"
+  },
+  "devDependencies": {
+    "lerna": "^8.2.4"
+  },
+  "workspaces": [
+    "codaw-product",
+    "codaw-transport",
+    "codaw-arrangement",
+    "codaw-library",
+    "codaw-inspector",
+    "codaw-mixer",
+    "codaw-clip-editor",
+    "codaw-engine",
+    "codaw-project",
+    "browser-app",
+    "electron-app"
+  ]
+}

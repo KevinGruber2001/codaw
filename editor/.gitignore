@@ -1,0 +1,14 @@
+node_modules
+.browser_modules
+lib
+dist
+*.log
+
+# The generated application folders are build output, except for the files that
+# define the product: manifests, branding resources and the packaging config.
+*-app/*
+!*-app/package.json
+!*-app/electron-builder.yml
+!*-app/ico/
+!*-app/resources/
+!*-app/esbuild.mjs
