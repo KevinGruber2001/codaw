@@ -1,0 +1,74 @@
+/********************************************************************************
+ * Copyright (C) 2026 Kevin Gruber.
+ *
+ * SPDX-License-Identifier: MIT
+ ********************************************************************************/
+
+/* The file slot beside the arrangement: one file, with this header in place of tabs. */
+.codaw-file-slot-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: var(--theia-content-line-height, 28px);
+    height: 28px;
+    padding: 0 4px 0 10px;
+    box-sizing: border-box;
+    background: var(--theia-editorGroupHeader-tabsBackground);
+    border-bottom: 1px solid var(--theia-panel-border);
+    border-left: 1px solid var(--theia-panel-border);
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+#codaw-file-slot #theia-main-content-panel {
+    border-left: 1px solid var(--theia-panel-border);
+}
+
+.codaw-file-slot-label {
+    font-weight: 600;
+}
+
+.codaw-file-slot-dirty {
+    color: var(--theia-editorWarning-foreground);
+}
+
+.codaw-file-slot-path {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--theia-descriptionForeground);
+    font-size: var(--theia-ui-font-size0);
+}
+
+.codaw-file-slot-spacer {
+    flex: 1 1 auto;
+}
+
+.codaw-file-slot-other {
+    padding: 1px 6px;
+    border: 1px solid var(--theia-panel-border);
+    border-radius: 3px;
+    background: transparent;
+    color: var(--theia-descriptionForeground);
+    font: inherit;
+    font-size: var(--theia-ui-font-size0);
+    cursor: pointer;
+}
+
+.codaw-file-slot-other:hover {
+    color: var(--theia-foreground);
+}
+
+.codaw-file-slot-close {
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--theia-foreground);
+    cursor: pointer;
+}
+
+.codaw-file-slot-close:hover {
+    background: var(--theia-toolbar-hoverBackground);
+}
