@@ -1,6 +1,7 @@
 id   = "pad"
 gain = -6.0
 pan  = -0.1
+solo = false
 
 [[fx]]
 type      = "reverb"

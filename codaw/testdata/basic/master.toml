@@ -1,4 +1,4 @@
-gain    = 0.0
+gain    = 2.5
 limiter = true
 
 [[fx]]
