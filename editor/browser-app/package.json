@@ -45,6 +45,9 @@
         "preferences": {
           "files.autoSave": "afterDelay",
           "files.autoSaveDelay": 500,
+          "[toml]": {
+            "editor.wordBasedSuggestions": "off"
+          },
           "workbench.colorTheme": "dark"
         }
       }
