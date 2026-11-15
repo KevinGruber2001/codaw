@@ -126,6 +126,12 @@ export class EngineService implements EngineClient {
         await this.server.start({ enginePath, projectFile });
     }
 
+    /** What project files may contain, as the engine binary itself says (`codaw schema`). */
+    async schema(): Promise<unknown> {
+        await this.preferenceService.ready;
+        return this.server.schema(this.preferenceService.get<string>(ENGINE_PATH_PREFERENCE, 'codaw'));
+    }
+
     stop(): Promise<void> {
         return this.server.stop();
     }

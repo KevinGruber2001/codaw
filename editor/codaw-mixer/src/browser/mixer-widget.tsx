@@ -10,8 +10,9 @@ import { ReactWidget, codicon } from '@theia/core/lib/browser/widgets';
 import { CommandService } from '@theia/core/lib/common/command';
 import { ProjectService } from 'codaw-project/lib/browser/project-service';
 import { ProjectEditService } from 'codaw-project/lib/browser/project-edit-service';
+import { SchemaService } from 'codaw-project/lib/browser/schema-service';
 import { ProjectCommands } from 'codaw-project/lib/browser/project-navigation';
-import { FADER_SCALE, Strip, faderDb, faderPosition, formatDb, stripsOf } from './mixer-model.js';
+import { DbRange, Strip, faderDb, faderPosition, faderScale, formatDb, gainRange, stripsOf } from './mixer-model.js';
 
 const ICONS: Record<Strip['kind'], string> = {
     track: 'pulse',
@@ -29,6 +30,8 @@ interface Gesture {
     value: number;
     startY: number;
     startValue: number;
+    /** The fader's range, for a gain. */
+    range: DbRange;
 }
 
 /**
@@ -51,6 +54,9 @@ export class MixerWidget extends ReactWidget {
 
     @inject(ProjectEditService)
     protected readonly edits: ProjectEditService;
+
+    @inject(SchemaService)
+    protected readonly schemaService: SchemaService;
 
     @inject(CommandService)
     protected readonly commands: CommandService;
@@ -97,6 +103,7 @@ export class MixerWidget extends ReactWidget {
 
     protected renderStrip(strip: Strip): React.ReactNode {
         const gain = this.valueOf(strip, 'gain', strip.gain);
+        const range = this.rangeOf(strip);
         const pan = strip.pan === undefined ? undefined : this.valueOf(strip, 'pan', strip.pan);
         const color = strip.color !== undefined ? `var(--codaw-track-color-${strip.color % 8})` : undefined;
         const style = { '--codaw-strip-color': color ?? 'var(--theia-descriptionForeground)' } as React.CSSProperties;
@@ -125,23 +132,23 @@ export class MixerWidget extends ReactWidget {
                     : <span className='codaw-strip-pan-none' />}
             </div>
             <div className='codaw-strip-values'>
-                <span className='codaw-strip-value' title='Level, in dB'>{formatDb(gain)}</span>
+                <span className='codaw-strip-value' title='Level, in dB'>{formatDb(gain, range)}</span>
                 <span className='codaw-strip-value codaw-strip-peak' title='Peak (the engine does not report levels yet)'>-∞</span>
             </div>
             <div className='codaw-strip-fader-area'>
-                <div className='codaw-strip-fader' title={`${formatDb(gain)} dB (drag, double-click for 0 dB)`}
+                <div className='codaw-strip-fader' title={`${formatDb(gain, range)} dB (drag, double-click for 0 dB)`}
                     onPointerDown={e => this.startGesture(e, strip, 'gain', gain)}
                     onPointerMove={this.moveGesture} onPointerUp={this.endGesture}
                     onDoubleClick={() => this.commit(strip, 'gain', 0)}>
                     <div className='codaw-strip-fader-groove' />
-                    <div className='codaw-strip-fader-cap' style={{ bottom: `${faderPosition(gain) * 100}%` }} />
+                    <div className='codaw-strip-fader-cap' style={{ bottom: `${faderPosition(gain, range) * 100}%` }} />
                 </div>
                 <div className='codaw-strip-meters' title='Level (the engine does not report levels yet)'>
                     <div className='codaw-strip-meter'><div className='codaw-strip-meter-level' style={{ height: '0%' }} /></div>
                     <div className='codaw-strip-meter'><div className='codaw-strip-meter-level' style={{ height: '0%' }} /></div>
                 </div>
                 <div className='codaw-strip-scale'>
-                    {FADER_SCALE.map(db => <span key={db} style={{ bottom: `${faderPosition(db) * 100}%` }}>{db}</span>)}
+                    {faderScale(range).map(db => <span key={db} style={{ bottom: `${faderPosition(db, range) * 100}%` }}>{db}</span>)}
                 </div>
             </div>
             <div className='codaw-strip-buttons'>
@@ -168,12 +175,12 @@ export class MixerWidget extends ReactWidget {
             return;
         }
         event.currentTarget.setPointerCapture(event.pointerId);
-        this.gesture = { key: strip.key, control, value, startY: event.clientY, startValue: value };
+        this.gesture = { key: strip.key, control, value, startY: event.clientY, startValue: value, range: this.rangeOf(strip) };
         if (control === 'gain') {
             // A click on the fader jumps there; dragging the cap moves it from where it is.
             const target = event.target as HTMLElement;
             if (!target.classList.contains('codaw-strip-fader-cap')) {
-                this.gesture.value = this.faderValueAt(event);
+                this.gesture.value = this.faderValueAt(event, this.gesture.range);
                 this.gesture.startValue = this.gesture.value;
             }
         }
@@ -188,7 +195,7 @@ export class MixerWidget extends ReactWidget {
         if (gesture.control === 'gain') {
             const rect = event.currentTarget.getBoundingClientRect();
             const delta = (gesture.startY - event.clientY) / rect.height;
-            gesture.value = faderDb(faderPosition(gesture.startValue) + delta);
+            gesture.value = faderDb(faderPosition(gesture.startValue, gesture.range) + delta, gesture.range);
         } else {
             const delta = (gesture.startY - event.clientY) / PAN_DRAG_RANGE * 2;
             gesture.value = Math.max(-1, Math.min(1, gesture.startValue + delta));
@@ -210,9 +217,13 @@ export class MixerWidget extends ReactWidget {
         }
     };
 
-    protected faderValueAt(event: React.PointerEvent<HTMLElement>): number {
+    protected rangeOf(strip: Strip): DbRange {
+        return gainRange(this.schemaService.schema, strip.kind);
+    }
+
+    protected faderValueAt(event: React.PointerEvent<HTMLElement>, range: DbRange): number {
         const rect = event.currentTarget.getBoundingClientRect();
-        return faderDb((rect.bottom - event.clientY) / rect.height);
+        return faderDb((rect.bottom - event.clientY) / rect.height, range);
     }
 
     /** Writes a value to the strip's file, and shows it until the file has been read back. */

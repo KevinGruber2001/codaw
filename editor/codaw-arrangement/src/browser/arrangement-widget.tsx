@@ -19,6 +19,7 @@ import { CommandService } from '@theia/core/lib/common/command';
 import { ContextKey, ContextKeyService } from '@theia/core/lib/browser/context-key-service';
 import { ArrangementClip } from './arrangement-model.js';
 import { AudioPeaksService } from 'codaw-project/lib/browser/audio-peaks-service';
+import { SchemaService } from 'codaw-project/lib/browser/schema-service';
 import { CodawProject } from 'codaw-project/lib/common/project-model';
 import { EnginePosition } from 'codaw-engine/lib/common/engine-protocol';
 import { EngineService } from 'codaw-engine/lib/browser/engine-service';
@@ -57,6 +58,9 @@ export class ArrangementWidget extends ReactWidget {
 
     @inject(AudioPeaksService)
     protected readonly audioPeaks: AudioPeaksService;
+
+    @inject(SchemaService)
+    protected readonly schemaService: SchemaService;
 
     @inject(ProjectEditService)
     protected readonly edits: ProjectEditService;
@@ -134,7 +138,7 @@ export class ArrangementWidget extends ReactWidget {
             // The first time: open the tracks that have automation, so it is visible that it is there.
             project.tracks.filter(t => t.automation.length > 0).forEach(t => expanded.add(t.id));
         }
-        this.arrangement = project ? fromProject(project, expanded) : { bpm: 120, beatsPerBar: 4, beatUnit: 4, tracks: [] };
+        this.arrangement = project ? fromProject(project, expanded, this.schemaService.schema) : { bpm: 120, beatsPerBar: 4, beatUnit: 4, tracks: [] };
         this.drag = undefined;
         if (this.selectedTrack !== undefined && !this.arrangement.tracks[this.selectedTrack]) {
             this.selectedTrack = undefined;

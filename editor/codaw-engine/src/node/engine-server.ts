@@ -1,5 +1,5 @@
 import { injectable } from '@theia/core/shared/inversify';
-import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
+import { ChildProcessWithoutNullStreams, execFile, spawn } from 'child_process';
 import * as path from 'path';
 import * as readline from 'readline';
 import { EngineClient, EngineServer, EngineStartOptions } from '../common/engine-protocol.js';
@@ -11,6 +11,8 @@ const PROTOCOL_VERSION = 1;
 const HELLO_TIMEOUT_MS = 10_000;
 /** How long a stopping engine gets to exit by itself before it is killed. */
 const SHUTDOWN_GRACE_MS = 3_000;
+/** How long `codaw schema` may take: it only prints a table. */
+const SCHEMA_TIMEOUT_MS = 10_000;
 
 /**
  * Runs one `codaw serve` process for one frontend connection, and translates between the two:
@@ -103,6 +105,22 @@ export class EngineServerImpl implements EngineServer {
 
     async seek(beat: number): Promise<void> {
         this.send({ type: EngineCommandType.Seek, beat });
+    }
+
+    schema(enginePath: string): Promise<unknown> {
+        return new Promise((resolve, reject) => {
+            execFile(enginePath, ['schema'], { timeout: SCHEMA_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024 }, (error, stdout) => {
+                if (error) {
+                    reject(new Error(`Could not run ${enginePath} schema: ${error.message.split('\n')[0]}`));
+                    return;
+                }
+                try {
+                    resolve(JSON.parse(stdout));
+                } catch {
+                    reject(new Error(`${enginePath} schema did not print JSON.`));
+                }
+            });
+        });
     }
 
     protected send(command: EngineCommand): void {

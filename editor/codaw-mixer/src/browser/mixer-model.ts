@@ -5,6 +5,7 @@
  ********************************************************************************/
 
 import { CodawProject, ProjectFx } from 'codaw-project/lib/common/project-model';
+import { ProjectSchema } from 'codaw-project/lib/common/project-schema';
 
 /*
  * The mixer's strips, from the project: one per track, in layout order, then one per bus, then the master.
@@ -51,30 +52,44 @@ export function stripsOf(project: CodawProject): Strip[] {
     ];
 }
 
-/** The range the engine accepts for every gain (validate.go). */
-export const MIN_DB = -60;
-export const MAX_DB = 6;
+/** The range of a fader, in dB. */
+export interface DbRange {
+    min: number;
+    max: number;
+}
+
+/**
+ * The range a gain may have: the schema's, for the `gain` of the kind of file the strip is. Without a
+ * schema (the engine binary could not be asked) the faders still need a length; this is it.
+ */
+export function gainRange(schema: ProjectSchema | undefined, kind: StripKind): DbRange {
+    const key = ProjectSchema.key(schema, kind, '', 'gain');
+    return key?.min !== undefined && key.max !== undefined ? { min: key.min, max: key.max } : { min: -60, max: 6 };
+}
 
 /**
  * Where a level sits on a fader, 0 (bottom) to 1 (top). Not linear in dB: the range a mix lives in, around
  * -20 to 0, gets most of the travel, and the quiet end is compressed, as on a hardware fader.
  */
-export function faderPosition(db: number): number {
-    const clamped = Math.min(MAX_DB, Math.max(MIN_DB, db));
-    return ((clamped - MIN_DB) / (MAX_DB - MIN_DB)) ** 1.5;
+export function faderPosition(db: number, range: DbRange): number {
+    const clamped = Math.min(range.max, Math.max(range.min, db));
+    return ((clamped - range.min) / (range.max - range.min)) ** 1.5;
 }
 
 /** The level at a fader position: the inverse of `faderPosition`. */
-export function faderDb(position: number): number {
+export function faderDb(position: number, range: DbRange): number {
     const clamped = Math.min(1, Math.max(0, position));
-    return MIN_DB + (MAX_DB - MIN_DB) * clamped ** (1 / 1.5);
+    return range.min + (range.max - range.min) * clamped ** (1 / 1.5);
 }
 
-/** The marks along a fader. */
-export const FADER_SCALE = [6, 0, -6, -12, -18, -24, -36, -48, -60];
+/** The marks along a fader: its ends, and the usual steps in between. */
+export function faderScale(range: DbRange): number[] {
+    const steps = [0, -6, -12, -18, -24, -36, -48].filter(db => db > range.min && db < range.max);
+    return [range.max, ...steps, range.min];
+}
 
-export function formatDb(db: number): string {
-    if (db <= MIN_DB) {
+export function formatDb(db: number, range: DbRange): string {
+    if (db <= range.min) {
         return '-∞';
     }
     return `${db > 0 ? '+' : ''}${db.toFixed(1)}`;

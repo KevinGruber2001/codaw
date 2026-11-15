@@ -26,6 +26,8 @@ export interface EngineServer {
     play(): Promise<void>;
     pause(): Promise<void>;         // the protocol's "stop" = pause at the playhead
     seek(beat: number): Promise<void>;
+    /** What `codaw schema` prints: what project files may contain. Runs the binary once; needs no project. */
+    schema(enginePath: string): Promise<unknown>;
     setClient(client: EngineClient | undefined): void;
     dispose(): void;
 }

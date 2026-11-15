@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: MIT
  ********************************************************************************/
 
-import { CodawProject, ProjectAutomation } from 'codaw-project/lib/common/project-model';
+import { CodawProject, ProjectAutomation, ProjectFx } from 'codaw-project/lib/common/project-model';
+import { ProjectSchema } from 'codaw-project/lib/common/project-schema';
 
 /*
  * What the arrangement view shows, in the shape of the project's TOML: a track per `tracks/*.toml`, a
@@ -162,7 +163,7 @@ export function automationPosition(lane: AutomationLane, value: number): number 
  * The arrangement of a project. `expanded` carries over which tracks had their automation open, by track
  * id, so reading the project again does not fold them all up.
  */
-export function fromProject(project: CodawProject, expanded: ReadonlySet<string>): Arrangement {
+export function fromProject(project: CodawProject, expanded: ReadonlySet<string>, schema?: ProjectSchema): Arrangement {
     return {
         bpm: project.bpm,
         beatsPerBar: project.beatsPerBar,
@@ -177,37 +178,25 @@ export function fromProject(project: CodawProject, expanded: ReadonlySet<string>
             solo: track.solo,
             expanded: expanded.has(track.id),
             clips: track.clips.map(clip => ({ ...clip })),
-            automation: track.automation.map(toLane)
+            automation: track.automation.map(lane => toLane(lane, track.fx, schema))
         }))
     };
 }
 
-/** An automation lane, drawn in the range its target can take. */
-function toLane(automation: ProjectAutomation): AutomationLane {
-    const { target, points } = automation;
-    const lane = (min: number, max: number, unit: string, log?: boolean): AutomationLane =>
-        ({ target, points: points.map(p => ({ ...p })), min, max, unit, log });
-    if (target === 'gain') {
-        return lane(-60, 6, 'dB');                  // the range validate.go allows
+/**
+ * A lane with the range and unit of what it changes, as the schema has them. Frequencies are drawn on a
+ * logarithmic scale. A target the schema does not know (or no schema at all) gets a range that fits its
+ * points.
+ */
+function toLane(automation: ProjectAutomation, effects: readonly ProjectFx[], schema: ProjectSchema | undefined): AutomationLane {
+    const { target } = automation;
+    const points = automation.points.map(p => ({ ...p }));
+    const key = ProjectSchema.target(schema, target, effects);
+    if (key?.min !== undefined && key.max !== undefined) {
+        return { target, points, min: key.min, max: key.max, unit: key.unit ?? '', log: key.unit === 'Hz' };
     }
-    if (target === 'pan') {
-        return lane(-1, 1, '');
-    }
-    const key = target.replace(/^fx\[\d+\]\./, '');
-    if (/hz$|freq|cutoff/i.test(key)) {
-        return lane(20, 20000, 'Hz', true);
-    }
-    if (/db$/i.test(key)) {
-        return lane(-24, 24, 'dB');
-    }
-    if (/^(wet|dry|mix|room_size|drive|amount|feedback)$/i.test(key)) {
-        return lane(0, 1, '');
-    }
-    // Unknown parameter: the range the points span, with some room.
     const values = points.map(p => p.value);
-    const min = Math.min(0, ...values);
-    const max = Math.max(1, ...values);
-    return lane(min, max, '');
+    return { target, points, min: Math.min(0, ...values), max: Math.max(1, ...values), unit: key?.unit ?? '' };
 }
 
 export function formatBeat(beat: number, beatsPerBar: number): string {
