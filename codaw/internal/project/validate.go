@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+
+	"github.com/KevinGruber2001/codaw/internal/schema"
 )
 
 // Validate checks a fully loaded Project for logical errors.
@@ -36,37 +39,13 @@ func validateTransport(p *Project) ValidationErrors {
 	t := p.Transport
 	file := "project.toml"
 
-	if t.BPM < 20 || t.BPM > 300 {
-		errs = append(errs, &ValidationError{
-			File:    file,
-			Field:   "transport.bpm",
-			Message: fmt.Sprintf("must be between 20 and 300, got %.1f", t.BPM),
-		})
-	}
+	errs = append(errs, checkNumbers(file, "transport.", schema.ProjectFile, "transport", t)...)
 
 	if t.TimeSig == "" {
 		errs = append(errs, &ValidationError{
 			File:    file,
 			Field:   "transport.time_sig",
 			Message: "required — e.g. \"4/4\"",
-		})
-	}
-
-	validSampleRates := map[int]bool{44100: true, 48000: true, 88200: true, 96000: true}
-	if !validSampleRates[t.SampleRate] {
-		errs = append(errs, &ValidationError{
-			File:    file,
-			Field:   "transport.sample_rate",
-			Message: fmt.Sprintf("must be 44100, 48000, 88200, or 96000 — got %d", t.SampleRate),
-		})
-	}
-
-	validBitDepths := map[int]bool{16: true, 24: true, 32: true}
-	if !validBitDepths[t.BitDepth] {
-		errs = append(errs, &ValidationError{
-			File:    file,
-			Field:   "transport.bit_depth",
-			Message: fmt.Sprintf("must be 16, 24, or 32 — got %d", t.BitDepth),
 		})
 	}
 
@@ -82,7 +61,7 @@ func validateMaster(p *Project) ValidationErrors {
 	}
 
 	file := p.Master.SourceFile
-	errs = append(errs, validateGain(file, "gain", p.Master.Gain)...)
+	errs = append(errs, checkNumbers(file, "", schema.MasterFile, "", *p.Master)...)
 	errs = append(errs, validateFXChain(file, "fx", p.Master.FX)...)
 
 	return errs
@@ -119,7 +98,7 @@ func validateBuses(p *Project) ValidationErrors {
 			seenIDs[b.ID] = file
 		}
 
-		errs = append(errs, validateGain(file, "gain", b.Gain)...)
+		errs = append(errs, checkNumbers(file, "", schema.BusFile, "", *b)...)
 		errs = append(errs, validateFXChain(file, "fx", b.FX)...)
 	}
 
@@ -154,10 +133,9 @@ func validateTracks(p *Project) ValidationErrors {
 			seenIDs[t.ID] = file
 		}
 
-		errs = append(errs, validateGain(file, "gain", t.Gain)...)
-		errs = append(errs, validatePan(file, "pan", t.Pan)...)
+		errs = append(errs, checkNumbers(file, "", schema.TrackFile, "", *t)...)
 		errs = append(errs, validateFXChain(file, "fx", t.FX)...)
-		errs = append(errs, validateClips(t)...)
+		errs = append(errs, validateClips(p.RootDir, t)...)
 		errs = append(errs, validateAutomation(t)...)
 	}
 
@@ -194,13 +172,7 @@ func validateAutomation(t *Track) ValidationErrors {
 		}
 
 		for j, pt := range a.Points {
-			if pt.Beat < 0 {
-				errs = append(errs, &ValidationError{
-					File:    file,
-					Field:   fmt.Sprintf("automation[%d].point[%d].beat", i, j),
-					Message: fmt.Sprintf("must be >= 0, got %.2f", pt.Beat),
-				})
-			}
+			errs = append(errs, checkNumbers(file, fmt.Sprintf("automation[%d].point[%d].", i, j), schema.TrackFile, "automation.point", pt)...)
 		}
 	}
 
@@ -208,7 +180,7 @@ func validateAutomation(t *Track) ValidationErrors {
 }
 
 // validateClips checks each clip on a track.
-func validateClips(t *Track) ValidationErrors {
+func validateClips(root string, t *Track) ValidationErrors {
 	var errs ValidationErrors
 	file := t.SourceFile
 
@@ -225,13 +197,9 @@ func validateClips(t *Track) ValidationErrors {
 				Message: "required",
 			})
 		} else {
-			// Check the audio file actually exists on disk.
-			// We resolve relative to the project root (stored in RootDir on the track
-			// via SourceFile's directory — we use the track's source file dir here
-			// since clips are relative to the project root).
-			// Note: in phase 3, the engine will also check this — but catching it
-			// here gives a much clearer error message.
-			clipPath := filepath.Join(filepath.Dir(file), "..", c.File)
+			// Clip files are relative to the project's folder, wherever the track file is: the same
+			// place the engine looks.
+			clipPath := filepath.Join(root, filepath.FromSlash(c.File))
 			if _, err := os.Stat(clipPath); os.IsNotExist(err) {
 				// We warn but don't hard-fail — the file might be generated later
 				// or the path might be intentional (e.g. a placeholder).
@@ -243,14 +211,6 @@ func validateClips(t *Track) ValidationErrors {
 			}
 		}
 
-		if c.Start < 0 {
-			errs = append(errs, &ValidationError{
-				File:    file,
-				Field:   field("start"),
-				Message: fmt.Sprintf("must be >= 0, got %.1f", c.Start),
-			})
-		}
-
 		if c.End <= c.Start {
 			errs = append(errs, &ValidationError{
 				File:    file,
@@ -259,15 +219,7 @@ func validateClips(t *Track) ValidationErrors {
 			})
 		}
 
-		if c.Offset < 0 {
-			errs = append(errs, &ValidationError{
-				File:    file,
-				Field:   field("offset"),
-				Message: fmt.Sprintf("must be >= 0, got %.2f", c.Offset),
-			})
-		}
-
-		errs = append(errs, validateGain(file, field("gain"), c.Gain)...)
+		errs = append(errs, checkNumbers(file, field(""), schema.TrackFile, "clip", c)...)
 	}
 
 	return errs
@@ -302,33 +254,37 @@ func validateReferences(p *Project) ValidationErrors {
 //  Shared helpers
 // ─────────────────────────────────────────────
 
-// validateGain checks a dB gain value is within the allowed range.
-// Extracted as a helper because gain appears on tracks, buses, master, and clips.
-func validateGain(file, field string, gain float64) ValidationErrors {
-	if gain < -60 || gain > 6 {
-		return ValidationErrors{&ValidationError{
-			File:    file,
-			Field:   field,
-			Message: fmt.Sprintf("gain must be between -60 and +6 dB, got %.1f", gain),
-		}}
+// checkNumbers checks every number of a struct against its key in the schema: the range, or the
+// few values allowed. The struct's fields are matched to keys by their toml tag, so a field added
+// to both is checked without anything written here.
+func checkNumbers(file, prefix string, kind schema.FileKind, section string, value any) ValidationErrors {
+	var errs ValidationErrors
+	f, _ := schema.FileOf(kind)
+	keys, _ := f.Section(section)
+	v := reflect.ValueOf(value)
+	for i := 0; i < v.NumField(); i++ {
+		key, ok := keys.Key(v.Type().Field(i).Tag.Get("toml"))
+		if !ok || key.Kind != schema.Number {
+			continue
+		}
+		var number float64
+		switch field := v.Field(i); {
+		case field.CanFloat():
+			number = field.Float()
+		case field.CanInt():
+			number = float64(field.Int())
+		default:
+			continue
+		}
+		if problem := key.Check(number); problem != "" {
+			errs = append(errs, &ValidationError{File: file, Field: prefix + key.Name, Message: problem})
+		}
 	}
-	return nil
+	return errs
 }
 
-// validatePan checks a pan value is within [-1, 1].
-func validatePan(file, field string, pan float64) ValidationErrors {
-	if pan < -1 || pan > 1 {
-		return ValidationErrors{&ValidationError{
-			File:    file,
-			Field:   field,
-			Message: fmt.Sprintf("pan must be between -1.0 and 1.0, got %.2f", pan),
-		}}
-	}
-	return nil
-}
-
-// validateFXChain checks each effect in a chain has a type.
-// Plugin-specific param validation happens in the engine when it loads the plugin.
+// validateFXChain checks each effect in a chain has a type, and that the parameters of the
+// effects the engine knows are in range.
 func validateFXChain(file, field string, fxs []FX) ValidationErrors {
 	var errs ValidationErrors
 
@@ -339,6 +295,22 @@ func validateFXChain(file, field string, fxs []FX) ValidationErrors {
 				Field:   fmt.Sprintf("%s[%d].type", field, i),
 				Message: "required — e.g. \"reverb\", \"eq_3band\", \"compressor\"",
 			})
+		}
+
+		effect, known := schema.EffectNamed(fx.Type)
+		if !known {
+			continue // the engine skips an effect it does not know
+		}
+		for _, param := range effect.Params {
+			if number, ok := schema.AsNumber(fx.Params[param.Name]); ok {
+				if problem := param.Check(number); problem != "" {
+					errs = append(errs, &ValidationError{
+						File:    file,
+						Field:   fmt.Sprintf("%s[%d].%s", field, i, param.Name),
+						Message: problem,
+					})
+				}
+			}
 		}
 	}
 

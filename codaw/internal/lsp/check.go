@@ -75,7 +75,7 @@ func (s *state) load(projectFile string) *view {
 		if v.docs[path] != nil || !strings.HasPrefix(path, v.root+string(filepath.Separator)) {
 			continue
 		}
-		alone := &project.Project{Transport: p.Transport, Buses: p.Buses}
+		alone := &project.Project{Transport: p.Transport, Buses: p.Buses, RootDir: v.root}
 		switch kindOf(path) {
 		case kindTrack:
 			var track project.Track
