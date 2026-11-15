@@ -9,7 +9,7 @@ import { inject, injectable, postConstruct } from '@theia/core/shared/inversify'
 import { ReactWidget, codicon } from '@theia/core/lib/browser/widgets';
 import { Message } from '@theia/core/shared/@lumino/messaging';
 import { SelectionService } from '@theia/core/lib/common/selection-service';
-import { ArrangementView, HEADER_WIDTH } from './arrangement-view.js';
+import { ArrangementView, HEADER_WIDTH, SampleDrop } from './arrangement-view.js';
 import { Arrangement, ClipDrag, ClipRef, DragEdge, Snap, arrangementEnd, fromProject, snapBeat, snapStep } from './arrangement-model.js';
 import { ProjectService } from 'codaw-project/lib/browser/project-service';
 import { ProjectEditService } from 'codaw-project/lib/browser/project-edit-service';
@@ -20,6 +20,7 @@ import { ContextKey, ContextKeyService } from '@theia/core/lib/browser/context-k
 import { ArrangementClip } from './arrangement-model.js';
 import { AudioPeaksService } from 'codaw-project/lib/browser/audio-peaks-service';
 import { SchemaService } from 'codaw-project/lib/browser/schema-service';
+import { DraggedSample, SAMPLE_DRAG_MIME, SampleDragService } from 'codaw-project/lib/browser/sample-drag';
 import { CodawProject } from 'codaw-project/lib/common/project-model';
 import { EnginePosition } from 'codaw-engine/lib/common/engine-protocol';
 import { EngineService } from 'codaw-engine/lib/browser/engine-service';
@@ -65,6 +66,9 @@ export class ArrangementWidget extends ReactWidget {
     @inject(ProjectEditService)
     protected readonly edits: ProjectEditService;
 
+    @inject(SampleDragService)
+    protected readonly sampleDrag: SampleDragService;
+
     @inject(CommandService)
     protected readonly commands: CommandService;
 
@@ -90,6 +94,7 @@ export class ArrangementWidget extends ReactWidget {
     /** The clip copied last; pasted at the playhead. */
     protected clipboard?: ArrangementClip;
     protected drag?: ClipDrag;
+    protected dropPreview?: SampleDrop;
     protected scrubbing = false;
 
     @postConstruct()
@@ -176,6 +181,10 @@ export class ArrangementWidget extends ReactWidget {
             selection={this.selection}
             selectedTrack={this.selectedTrack}
             drag={this.drag}
+            dropPreview={this.dropPreview}
+            onLaneDragOver={this.onLaneDragOver}
+            onLaneDragLeave={this.onLaneDragLeave}
+            onLaneDrop={this.onLaneDrop}
             onSnapChange={this.setSnap}
             onRulerPointerDown={this.onRulerPointerDown}
             onRulerPointerMove={this.onRulerPointerMove}
@@ -569,6 +578,72 @@ export class ArrangementWidget extends ReactWidget {
         if (event.key === 'Escape') {
             this.clearSelection();
         }
+    };
+
+    // ── samples dropped from the Library ──────────────────────────────────────────────────────────
+
+    /**
+     * Where a sample would land on a track: at the pointer, on the snap grid (Alt ignores it), as long as
+     * the sample plays at the project's tempo, or a bar if that is not known yet.
+     */
+    protected sampleDrop(event: React.DragEvent<HTMLElement>, track: number, sample: DraggedSample): SampleDrop {
+        const beat = (event.clientX - event.currentTarget.getBoundingClientRect().left) / this.pxPerBeat;
+        const start = Math.max(0, snapBeat(beat, event.altKey ? 0 : this.step));
+        const duration = sample.duration ?? this.audioPeaks.get(sample.uri)?.duration;
+        const beats = duration ? duration * this.arrangement.bpm / 60 : this.arrangement.beatsPerBar;
+        return { track, file: sample.file, start, end: Math.round((start + beats) * 1000) / 1000 };
+    }
+
+    protected readonly onLaneDragOver = (event: React.DragEvent<HTMLElement>, track: number): void => {
+        if (!event.dataTransfer.types.includes(SAMPLE_DRAG_MIME)) {
+            return;
+        }
+        // Theia's own listeners further up (the dock panel's, the document's) set the drop effect to
+        // "link" or "none", which the Library's "copy" does not allow, and the drop would be refused.
+        event.preventDefault();
+        event.stopPropagation();
+        event.dataTransfer.dropEffect = 'copy';
+        const sample = this.sampleDrag.current;
+        const preview = sample && this.sampleDrop(event, track, sample);
+        const old = this.dropPreview;
+        if (preview?.track !== old?.track || preview?.start !== old?.start || preview?.end !== old?.end) {
+            this.dropPreview = preview;
+            this.update();
+        }
+    };
+
+    protected readonly onLaneDragLeave = (event: React.DragEvent<HTMLElement>, track: number): void => {
+        if (this.dropPreview?.track === track && !event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            this.dropPreview = undefined;
+            this.update();
+        }
+    };
+
+    /** Adds the dropped sample to the track as a new clip, after its last one, and selects it. */
+    protected readonly onLaneDrop = (event: React.DragEvent<HTMLElement>, index: number): void => {
+        const data = event.dataTransfer.getData(SAMPLE_DRAG_MIME);
+        this.dropPreview = undefined;
+        if (!data) {
+            this.update();
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();   // not for the dock panel, which would try to open it as a file
+        const track = this.arrangement.tracks[index];
+        let sample: DraggedSample;
+        try {
+            sample = JSON.parse(data);
+        } catch {
+            this.update();
+            return;
+        }
+        const { start, end } = this.sampleDrop(event, index, sample);
+        const clip: ArrangementClip = { file: sample.file, uri: sample.uri, start, end, loop: false, gain: 0, offset: 0 };
+        track.clips.push(clip);
+        this.select({ track: index, clip: track.clips.length - 1 });
+        this.update();
+        this.node.focus();
+        this.edits.addClip(track.uri, clip);
     };
 
     // ── tracks ────────────────────────────────────────────────────────────────────────────────────

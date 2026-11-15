@@ -27,6 +27,14 @@ const AUTOMATION_HEIGHT = 44;
 /** Pixels per drawn peak in a waveform. */
 const PX_PER_PEAK = 2;
 
+/** A sample over a track, about to become a clip there. */
+export interface SampleDrop {
+    track: number;
+    file: string;
+    start: number;
+    end: number;
+}
+
 export interface ArrangementViewProps {
     arrangement: Arrangement;
     pxPerBeat: number;
@@ -36,6 +44,8 @@ export interface ArrangementViewProps {
     /** The track pasting goes to. */
     selectedTrack?: number;
     drag?: ClipDrag;
+    /** Where a sample dragged from the Library would land. */
+    dropPreview?: SampleDrop;
     onSnapChange(snap: Snap): void;
     onRulerPointerDown(event: React.PointerEvent<HTMLElement>): void;
     onRulerPointerMove(event: React.PointerEvent<HTMLElement>): void;
@@ -44,6 +54,9 @@ export interface ArrangementViewProps {
     onClipPointerMove(event: React.PointerEvent<HTMLElement>): void;
     onClipPointerUp(event: React.PointerEvent<HTMLElement>): void;
     onToggleMute(track: number): void;
+    onLaneDragOver(event: React.DragEvent<HTMLElement>, track: number): void;
+    onLaneDragLeave(event: React.DragEvent<HTMLElement>, track: number): void;
+    onLaneDrop(event: React.DragEvent<HTMLElement>, track: number): void;
     onToggleSolo(track: number): void;
     onToggleExpanded(track: number): void;
     onBackgroundPointerDown(): void;
@@ -175,7 +188,11 @@ function TrackRow(props: ArrangementViewProps & {
                     title='Solo' aria-pressed={track.solo} onClick={() => props.onToggleSolo(index)}>S</button>
             </div>
         </div>
-        <div className='codaw-arr-lane codaw-arr-grid' style={props.gridStyle}>
+        <div className='codaw-arr-lane codaw-arr-grid' style={props.gridStyle}
+            onDragEnter={e => props.onLaneDragOver(e, index)}
+            onDragOver={e => props.onLaneDragOver(e, index)}
+            onDragLeave={e => props.onLaneDragLeave(e, index)}
+            onDrop={e => props.onLaneDrop(e, index)}>
             {track.clips.map((clip, clipIndex) => {
                 const ref = { track: index, clip: clipIndex };
                 const dragging = props.drag && ClipRef.equals(props.drag.ref, ref) ? props.drag : undefined;
@@ -186,6 +203,10 @@ function TrackRow(props: ArrangementViewProps & {
                     onPointerDown={props.onClipPointerDown} onPointerMove={props.onClipPointerMove}
                     onPointerUp={props.onClipPointerUp} />;
             })}
+            {props.dropPreview?.track === index && <div className='codaw-arr-drop-ghost'
+                style={{ left: props.dropPreview.start * pxPerBeat, width: Math.max(4, (props.dropPreview.end - props.dropPreview.start) * pxPerBeat) }}>
+                {clipName({ file: props.dropPreview.file } as ArrangementClip)}
+            </div>}
         </div>
     </div>;
 }
