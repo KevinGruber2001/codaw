@@ -1,0 +1,46 @@
+{
+  "private": true,
+  "name": "codaw-transport",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "CodaW transport bar: play, stop, loop, position and tempo",
+  "license": "MIT",
+  "keywords": [
+    "theia-extension"
+  ],
+  "files": [
+    "lib",
+    "src"
+  ],
+  "dependencies": {
+    "@theia/core": "1.77.0",
+    "codaw-engine": "0.1.0",
+    "codaw-project": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "rimraf": "^5.0.0",
+    "typescript": "~5.9.3"
+  },
+  "scripts": {
+    "compile": "npm run clean && npm run build",
+    "clean": "rimraf lib",
+    "build": "tsc",
+    "watch": "tsc -w"
+  },
+  "theiaExtensions": [
+    {
+      "frontend": "lib/browser/transport-frontend-module"
+    }
+  ],
+  "peerDependencies": {
+    "react": "^19.2.0"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    "./lib/*.json": "./lib/*.json",
+    "./lib/*.js": "./lib/*.js",
+    "./lib/*": "./lib/*.js",
+    "./*": "./*"
+  }
+}
