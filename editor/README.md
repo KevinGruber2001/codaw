@@ -2,9 +2,9 @@
 
 The CodaW desktop and browser application, built on [Eclipse Theia](https://theia-ide.org).
 
-The audio engine lives in [`../codaw`](../codaw); this folder is the editor around it. Today it is the
-Theia shell with CodaW's branding, a transport bar, and placeholders for the arrangement, mixer and other
-views.
+The audio engine lives in [`../codaw`](../codaw); this folder is the editor around it: an arrangement,
+a transport bar, a mixer, an inspector, a sample library and TOML editing with the engine's language
+server, all reading and writing the project's files.
 
 ## Layout
 
@@ -13,12 +13,13 @@ views.
 | `codaw-product/` | The product: branding, welcome page, About dialog, Help menu, window icon; the application shell (the arrangement as the fixed main view, Theia's main area beside it as a one-file slot); the default layout; and what is left out of Theia (Outline, Problems, the Selection and Go menus). Depends on every feature package. |
 | `codaw-transport/` | The transport bar between the menu and the work area, and its commands and keys. |
 | `codaw-arrangement/` | The arrangement: tracks, clips, automation and the playhead. Always there, placed by the shell; clicking a track, clip or lane opens it in its file. |
-| `codaw-library/` | The library view (left). |
+| `codaw-library/` | The Library (left): the project's samples, with preview, import by drag and drop, and dragging onto a track to make a clip. |
 | `codaw-inspector/` | The Inspector (right): Theia's property view (`@theia/property-view`) under CodaW's name, with what the files do not say about the selection (for a clip: lengths, the audio, the signal path). |
 | `codaw-mixer/` | The mixer view (bottom). |
-| `codaw-clip-editor/` | The clip editor view (bottom). |
+| `codaw-clip-editor/` | The clip editor view (bottom). A placeholder for now. |
+| `codaw-language/` | TOML in the editor: a TextMate grammar for highlighting, and a client for the engine's language server (`codaw lsp`): diagnostics, completion, hover. |
 | `codaw-engine/` | The audio engine: starts `codaw serve` for the open project (backend), `EngineService` for the frontend, and the Engine Log view (bottom). |
-| `codaw-project/` | The open project, read from its TOML and read again when the files change (`ProjectService`); the peaks of its audio files, for waveforms (`AudioPeaksService`). No views. |
+| `codaw-project/` | The open project, read from its TOML and read again when the files change (`ProjectService`); the peaks of its audio files, for waveforms (`AudioPeaksService`); edits to the TOML through the text models (`ProjectEditService`); the engine's schema (`SchemaService`). No views. |
 | `configs/base.tsconfig.json` | The compiler options every package's `tsconfig.json` extends. |
 | `browser-app/` | The browser application — the Theia frontend and backend served over HTTP. |
 | `electron-app/` | The desktop application, plus the `electron-builder` packaging configuration. |
@@ -27,8 +28,7 @@ views.
 Every feature is its own Theia extension package, owning its views, commands, services and styles,
 the way Theia's own packages do. Features don't depend on each other; they talk through the shared
 packages `codaw-engine` and `codaw-project`. Where a view goes is the feature's call (its view contribution); which views make up the first
-start is the product's (`codaw-layout-contribution.ts`). The views are placeholders for now, styled by
-`codaw-product/src/browser/style/placeholder.css`.
+start is the product's (`codaw-layout-contribution.ts`).
 
 `browser-app` and `electron-app` are mostly generated: only `package.json`, `esbuild.mjs`,
 `electron-builder.yml` and the `resources`/`ico` folders are checked in, everything else is build output.

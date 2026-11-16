@@ -1,13 +1,13 @@
 # Runtime control channel — design notes
 
 Status: **v1 implemented** — `codaw serve` (engine: `internal/serve`, protocol
-version 1) and the extension-side client (`vscode-extension/src/engineClient.ts`).
+version 1) and the editor's client (`editor/codaw-engine/src/node/engine-server.ts`).
 Decision: **stdio JSON-lines first, Unix socket later if multi-client becomes real.**
 
 ## The two planes of data
 
 CodaW already has a complete answer for *project* data: TOML files are the
-source of truth, every consumer (engine, extension, human with a text editor)
+source of truth, every consumer (engine, editor, human with a text editor)
 reads and writes those files, and the watcher hot-reloads the engine. That
 channel is durable, diffable, git-versioned — and it must stay the ONLY way
 project data moves. Adding a second write path for project data (e.g. "set
@@ -28,7 +28,7 @@ the channel carries what you'd never commit.**
 
 ## Alternatives considered
 
-### A. stdio JSON-lines (extension spawns `codaw serve` as a child process)
+### A. stdio JSON-lines (the editor spawns `codaw serve` as a child process)
 
 The Language Server Protocol model: one process per consumer, newline-delimited
 JSON on stdin/stdout.
@@ -48,7 +48,7 @@ JSON on stdin/stdout.
 
 The original plan from the project summary ("Swift UI via Unix socket").
 
-- ✅ Multi-client: extension + CLI + future Swift app can share one engine
+- ✅ Multi-client: editor + CLI + other frontends can share one engine
 - ✅ Still no network exposure (filesystem permissions gate access)
 - ✅ Same JSON-lines framing works verbatim
 - ❌ Lifecycle is now a real problem: who starts the engine? who kills it?
@@ -89,7 +89,7 @@ Listed only because it's tempting given the watcher already exists:
 ## Decision
 
 **Phase 1 — now: option A.** `codaw serve <project.toml>` speaking JSON-lines
-over stdio. The extension owns the process (spawn on open, kill on close),
+over stdio. The editor owns the process (spawn on open, kill on close),
 which eliminates the entire lifecycle/discovery problem class on day one.
 This is the boring, battle-tested choice: it is literally how every language
 server ships.
@@ -97,7 +97,7 @@ server ships.
 **Phase 2 — only when a second simultaneous client actually exists** (Swift
 app, standalone mixer CLI): lift the same protocol onto a Unix socket /
 named pipe. Because framing and messages don't change, `serve` grows a
-`--listen <path>` flag and the stdio path stays for the extension. The
+`--listen <path>` flag and the stdio path stays for the editor. The
 protocol is transport-agnostic by construction, so this is additive.
 
 Skip C/D/E unless a browser client or remote control becomes a real
@@ -124,7 +124,7 @@ Ground rules:
 
 1. **`protocol_version` in the hello message.** First message from the engine:
    `{"type":"hello","protocol_version":1,"engine_version":"0.1.3"}`. The
-   extension refuses to talk to a version it doesn't know. Costs one field,
+   editor refuses to talk to a version it doesn't know. Costs one field,
    saves a debugging weekend later.
 2. **Project edits do NOT travel over this channel.** The UI writes TOML; the
    watcher picks it up. One writer per plane. (If knob-drag latency ever
